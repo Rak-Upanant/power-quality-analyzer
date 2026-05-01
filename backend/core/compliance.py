@@ -66,22 +66,21 @@ def evaluate_compliance(
     """
     failing_points: dict = {}
     voltage_compliance = "Pass"
-    current_compliance = "Pass"
+    # >69 kV systems: Tables 3/4 not implemented — report N/A instead of false-Pass/Fail
+    current_compliance = "Pass" if nominal_voltage <= 69_000 else "N/A"
 
     v_limit_table = get_voltage_limit_table(nominal_voltage)
     isc_il_ratio  = isc / il if il > 0 else 0.0
     c_limit_row   = get_current_limit_row(nominal_voltage, isc_il_ratio)
 
     # ── Voltage THD (§5.1) ──────────────────────────────────────────────────
+    # The IEEE 519-2022 1.5× envelope applies to *very-short-time* (3-s) values.
+    # CA8335 5-min data cannot produce a true 3-s aggregate, so we skip that check
+    # and rely on the weekly 95th-percentile criterion.
     for phase in (1, 2, 3):
         col = f"{v_thd_prefix}{phase} THD"
-        t99_3s  = voltage_thd_percentiles.get(f"{col}_99th_3s",   0.0)
         t95_10m = voltage_thd_percentiles.get(f"{col}_95th_10min", 0.0)
 
-        if t99_3s > v_limit_table["thd"] * 1.5:
-            voltage_compliance = "Fail"
-            _add_fail(failing_points, "Voltage THD", "Daily 99th pct (3s) > 1.5× THD limit",
-                      phase=f"{v_thd_prefix}{phase}")
         if t95_10m > v_limit_table["thd"]:
             voltage_compliance = "Fail"
             _add_fail(failing_points, "Voltage THD", "Weekly 95th pct (10min) > THD limit",
@@ -107,14 +106,9 @@ def evaluate_compliance(
             current_compliance = "Fail"
             _add_fail(failing_points, "Current TDD", "Weekly 95th pct (10min) TDD > limit")
 
+        # Skip the 2.0× very-short-time (3-s) envelope on 5-min data — see voltage note.
         for phase in (1, 2, 3):
-            t_3s  = tdd_percentiles.get(f"TDD{phase}_99th_3s",   0.0)
             t_99  = tdd_percentiles.get(f"TDD{phase}_99th_10min", 0.0)
-
-            if t_3s > tdd_limit * 2.0:
-                current_compliance = "Fail"
-                _add_fail(failing_points, "Current TDD",
-                          "Daily 99th pct (3s) > 2.0× TDD limit", phase=f"A{phase}")
             if t_99 > tdd_limit * 1.5:
                 current_compliance = "Fail"
                 _add_fail(failing_points, "Current TDD",
@@ -161,26 +155,27 @@ def evaluate_compliance(
             })
 
     tdd_per_phase = []
-    for phase in (1, 2, 3):
-        t95 = _f(tdd_percentiles.get(f"TDD{phase}_95th_10min", 0.0))
-        t99 = _f(tdd_percentiles.get(f"TDD{phase}_99th_10min", 0.0))
-        tdd_per_phase.append({
-            "phase": f"A{phase}",
-            "t95_10min": t95, "t99_10min": t99,
-            "limit_tdd": c_tdd_limit, "limit_tdd_99": round(c_tdd_limit * 1.5, 2),
-            "pass_t95": t95 <= c_tdd_limit, "pass_t99": t99 <= c_tdd_limit * 1.5,
-        })
-
     ah_indiv_detail = []
-    for h in [3, 5, 7, 9, 11, 13, 15, 17, 19, 23, 25]:
-        vals  = [_f(ah_indiv.get(f"A{p}h{h}_95th", 0.0)) for p in (1, 2, 3)]
-        worst = max(vals)
-        limit = get_current_limit_for_harmonic(h, c_limit_row)
-        if worst > 0.05:
-            ah_indiv_detail.append({
-                "order": h, "A1": vals[0], "A2": vals[1], "A3": vals[2],
-                "worst": worst, "limit": round(limit, 2), "pass": worst <= limit,
+    if c_limit_row:
+        for phase in (1, 2, 3):
+            t95 = _f(tdd_percentiles.get(f"TDD{phase}_95th_10min", 0.0))
+            t99 = _f(tdd_percentiles.get(f"TDD{phase}_99th_10min", 0.0))
+            tdd_per_phase.append({
+                "phase": f"A{phase}",
+                "t95_10min": t95, "t99_10min": t99,
+                "limit_tdd": c_tdd_limit, "limit_tdd_99": round(c_tdd_limit * 1.5, 2),
+                "pass_t95": t95 <= c_tdd_limit, "pass_t99": t99 <= c_tdd_limit * 1.5,
             })
+
+        for h in [3, 5, 7, 9, 11, 13, 15, 17, 19, 23, 25]:
+            vals  = [_f(ah_indiv.get(f"A{p}h{h}_95th", 0.0)) for p in (1, 2, 3)]
+            worst = max(vals)
+            limit = get_current_limit_for_harmonic(h, c_limit_row)
+            if worst > 0.05:
+                ah_indiv_detail.append({
+                    "order": h, "A1": vals[0], "A2": vals[1], "A3": vals[2],
+                    "worst": worst, "limit": round(limit, 2), "pass": worst <= limit,
+                })
 
     compliance_detail = {
         "data_is_5min":       True,
@@ -192,6 +187,11 @@ def evaluate_compliance(
             "per_phase": voltage_per_phase, "top_harmonics": vh_indiv_detail,
         },
         "current": {
+            "applicable":     c_limit_row is not None,
+            "not_applicable_reason": (
+                None if c_limit_row is not None
+                else "IEEE 519-2022 Tables 3/4 (> 69 kV) not implemented in this analyzer."
+            ),
             "tdd_limit": c_tdd_limit, "h_lt11_limit": c_h_lt11,
             "per_phase_tdd": tdd_per_phase, "top_harmonics": ah_indiv_detail,
         },

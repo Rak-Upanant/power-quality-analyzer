@@ -47,10 +47,14 @@ export const getCurrentLimitData = (systemInfo, harmonicOrders) => {
     if (!limitRow) return null;
 
     return harmonicOrders.map(h => {
-        if (h < 11) return limitRow.h_lt_11;
-        if (h < 17) return limitRow.h_11_17;
-        if (h < 23) return limitRow.h_17_23;
-        if (h < 35) return limitRow.h_23_35;
-        return limitRow.h_gt_35;
+        let base;
+        if (h < 11) base = limitRow.h_lt_11;
+        else if (h < 17) base = limitRow.h_11_17;
+        else if (h < 23) base = limitRow.h_17_23;
+        else if (h < 35) base = limitRow.h_23_35;
+        else base = limitRow.h_gt_35;
+        // IEEE 519-2022 Table 2 footnote (a): even harmonics h ≤ 6 limited to 50%
+        if (h <= 6 && h % 2 === 0) base *= 0.5;
+        return base;
     });
 };

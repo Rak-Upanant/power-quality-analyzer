@@ -75,6 +75,15 @@ def analyze_full_data(dfs: dict, nominal_voltage: float, isc: float, il: float) 
     # ── 1. Build time-indexed DataFrame ──────────────────────────────────────
     clean_df = build_trend_index(df_trend)
 
+    # Measurement duration — IEEE 519-2022 §4.4 requires a 7-day window for
+    # weekly statistics. Surface this so the UI can warn for short captures.
+    if len(clean_df.index) >= 2:
+        span = clean_df.index.max() - clean_df.index.min()
+        measurement_duration_days = round(span.total_seconds() / 86400.0, 2)
+    else:
+        measurement_duration_days = 0.0
+    weekly_window_satisfied = measurement_duration_days >= 7.0
+
     # ── 2. Compute per-phase TDD ──────────────────────────────────────────────
     # TDD = (Ih_rms / IL) × 100  where  I1 = Irms / √(1 + THDi²),  Ih = I1 × THDi
     if il > 0:
@@ -181,11 +190,13 @@ def analyze_full_data(dfs: dict, nominal_voltage: float, isc: float, il: float) 
 
     # ── 9. Assemble result ────────────────────────────────────────────────────
     result = {
-        "thdv_percent":       nan_to_zero(thdv_overall),
-        "tdd_percent":        nan_to_zero(tdd_overall),
-        "isc_il_ratio":       compliance["isc_il_ratio"],
-        "v_thd_prefix_used":  v_thd_prefix,
-        "summary_stats":      summary_stats,
+        "thdv_percent":             nan_to_zero(thdv_overall),
+        "tdd_percent":              nan_to_zero(tdd_overall),
+        "isc_il_ratio":             compliance["isc_il_ratio"],
+        "v_thd_prefix_used":        v_thd_prefix,
+        "measurement_duration_days": measurement_duration_days,
+        "weekly_window_satisfied":  weekly_window_satisfied,
+        "summary_stats":            summary_stats,
         "voltage_compliance": compliance["voltage_compliance"],
         "current_compliance": compliance["current_compliance"],
         "failing_points":     compliance["failing_points"],
