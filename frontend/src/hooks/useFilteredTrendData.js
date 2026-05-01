@@ -44,7 +44,6 @@ export const useFilteredTrendData = (analysisResult, startDate, endDate, startTi
             }
         }
         
-        console.log('%c[3] `filteredTrendData` to be passed to chart:', 'color: orange; font-weight: bold;', filteredData);
         return filteredData;
     }, [analysisResult, startDate, endDate, startTime, endTime]);
 };

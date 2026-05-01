@@ -44,6 +44,27 @@ const TrendChart = React.forwardRef(({ datasets, title, yAxisLabel, timestamps }
     );
   }
 
+  const handleSnapshot = () => {
+    const chart = ref?.current;
+    if (!chart || typeof chart.toBase64Image !== 'function') return;
+    const src = chart.toBase64Image('image/png', 1);
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width * 2;
+      c.height = img.height * 2;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      const link = document.createElement('a');
+      link.href = c.toDataURL('image/png');
+      link.download = `${title.replace(/[^\w]+/g, '_')}.png`;
+      link.click();
+    };
+    img.src = src;
+  };
+
   const chartData = { datasets: datasets };
 
   const options = {
@@ -72,7 +93,11 @@ const TrendChart = React.forwardRef(({ datasets, title, yAxisLabel, timestamps }
   };
 
   return (
-    <div className="chart-container" style={{ height: '400px' }}>
+    <div className="chart-container chart-wrapper" style={{ height: '400px' }}>
+      <button type="button" className="chart-snapshot-btn"
+        onClick={handleSnapshot} aria-label={`Save ${title} as PNG`} title="Save chart as PNG">
+        📷
+      </button>
       <Line ref={ref} options={options} data={chartData} />
     </div>
   );

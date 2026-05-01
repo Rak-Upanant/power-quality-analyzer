@@ -2,9 +2,9 @@
 /* CSS Variables for Consistent Theming          */
 /* =============================================== */
 :root {
-    --primary-color: #000000; /* Indigo */
-    --primary-dark-color: #000000;
-    --primary-light-color: #9fa8da;
+    --primary-color: #3b82f6; /* Blue 500 — matches SystemInfoForm accents */
+    --primary-dark-color: #2563eb; /* Blue 600 */
+    --primary-light-color: #bfdbfe;
     --accent-color: #ff4081; /* Pink */
     --success-color: #4caf50; /* Green */
     --error-color: #f44336;   /* Red */
@@ -350,12 +350,13 @@ h1 {
 }
 
 .criteria-table th {
-    background-color: #000000;
+    background-color: var(--primary-dark-color);
+    color: #ffffff;
     font-weight: bold;
 }
 
 .criteria-table tr.highlight {
-    background-color:  #ff0000;
+    background-color: #fef3c7; /* amber-100 — readable highlight */
     font-weight: bold;
 }
 
@@ -865,7 +866,10 @@ h1 {
 .compliance-btn:active{transform:scale(.97)}
 .compliance-btn--pass{background:#dcfce7;color:#15803d}
 .compliance-btn--fail{background:#fee2e2;color:#b91c1c}
+.compliance-btn--na{background:#f1f5f9;color:#475569}
 .compliance-btn-hint{font-size:.72rem;font-weight:400;opacity:.7}
+.cdp-na-note{color:#475569;font-style:italic}
+.duration-warning{margin:0 0 16px;padding:10px 14px;border-radius:8px;background:#fef9c3;border:1px solid #fde047;color:#713f12;font-size:.92rem;line-height:1.4}
 
 /* CDP inline card */
 .cdp-inline-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;margin:16px 0 24px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
@@ -944,7 +948,10 @@ h1 {
 .compliance-btn:active{transform:scale(.97)}
 .compliance-btn--pass{background:#dcfce7;color:#15803d}
 .compliance-btn--fail{background:#fee2e2;color:#b91c1c}
+.compliance-btn--na{background:#f1f5f9;color:#475569}
 .compliance-btn-hint{font-size:.72rem;font-weight:400;opacity:.7}
+.cdp-na-note{color:#475569;font-style:italic}
+.duration-warning{margin:0 0 16px;padding:10px 14px;border-radius:8px;background:#fef9c3;border:1px solid #fde047;color:#713f12;font-size:.92rem;line-height:1.4}
 
 /* ── Summary header + "Full Details" btn ───────────────────── */
 .summary-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}

@@ -244,7 +244,7 @@ const AnalysisReport = React.forwardRef(({
                     const {summary_stats:s,voltage_compliance:vc,current_compliance:cc,thdv_percent,tdd_percent}=analysisResult;
                     [
                         ['Voltage Compliance:', vc, vc==='Pass'?[0,128,0]:[180,0,0]],
-                        ['Current Compliance:', cc, cc==='Pass'?[0,128,0]:[180,0,0]],
+                        ['Current Compliance:', cc, cc==='Pass'?[0,128,0]:cc==='N/A'?[100,116,139]:[180,0,0]],
                         ['THDv 95th/10min (LN):', `${thdv_percent.toFixed(2)} %`, null],
                         ['TDD 95th/10min:', `${tdd_percent.toFixed(2)} %`, null],
                         ['Avg. Power Factor:', s.power_factor_avg.toFixed(3), null],
@@ -337,6 +337,13 @@ const AnalysisReport = React.forwardRef(({
             </button>
         </div>
 
+        {analysisResult.weekly_window_satisfied===false&&(
+            <div className="duration-warning" role="status">
+                ⚠ Measurement spans <strong>{analysisResult.measurement_duration_days} days</strong>.
+                IEEE 519-2022 §4.4 weekly statistics assume a 7-day window — treat compliance verdicts as indicative only.
+            </div>
+        )}
+
         {/* Compliance Summary */}
         <div className="summary-card">
             <div className="summary-header">
@@ -357,9 +364,9 @@ const AnalysisReport = React.forwardRef(({
                     </div>
                     <div className="summary-item">
                         <span className="summary-label">Current Compliance</span>
-                        <button className={`compliance-btn ${analysisResult.current_compliance==='Pass'?'compliance-btn--pass':'compliance-btn--fail'}`}
+                        <button className={`compliance-btn ${analysisResult.current_compliance==='Pass'?'compliance-btn--pass':analysisResult.current_compliance==='N/A'?'compliance-btn--na':'compliance-btn--fail'}`}
                             onClick={()=>setComplianceModal('current')}>
-                            {analysisResult.current_compliance==='Pass'?'✅ Pass':'❌ Fail'}
+                            {analysisResult.current_compliance==='Pass'?'✅ Pass':analysisResult.current_compliance==='N/A'?'— N/A':'❌ Fail'}
                             <span className="compliance-btn-hint">→ details</span>
                         </button>
                     </div>

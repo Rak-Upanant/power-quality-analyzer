@@ -4,7 +4,17 @@ import OverPill from './OverPill';
 import { pct } from '../constants/reportConstants';
 
 const CurrentDetailContent = ({current,isc_il_ratio,is5min}) => {
-    const {tdd_limit,h_lt11_limit,per_phase_tdd,top_harmonics} = current;
+    const {applicable=true,not_applicable_reason,tdd_limit,h_lt11_limit,per_phase_tdd,top_harmonics} = current;
+    if (!applicable) {
+        return (
+            <div className="cdp-section">
+                <p className="cdp-section-meta cdp-na-note">
+                    Current distortion compliance: <strong>N/A</strong>
+                </p>
+                <p>{not_applicable_reason || 'Current limit table not available for this system voltage.'}</p>
+            </div>
+        );
+    }
     const bracket = isc_il_ratio<20?'<20':isc_il_ratio<50?'20–50':isc_il_ratio<100?'50–100':isc_il_ratio<1000?'100–1000':'>1000';
     return (
         <div className="cdp-section">

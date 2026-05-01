@@ -115,8 +115,39 @@ const HarmonicBarChart = React.forwardRef(({ chartData, title, yAxisLabel, limit
     datasets: datasets,
   };
 
+  const handleSnapshot = () => {
+    const chart = ref?.current;
+    if (!chart) return;
+    // 2x white-background PNG named after the chart title
+    const src = typeof chart.toBase64Image === 'function'
+      ? chart.toBase64Image('image/png', 1)
+      : null;
+    if (!src) return;
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width * 2;
+      c.height = img.height * 2;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      const link = document.createElement('a');
+      link.href = c.toDataURL('image/png');
+      link.download = `${title.replace(/[^\w]+/g, '_')}.png`;
+      link.click();
+    };
+    img.src = src;
+  };
+
   return (
-    <div style={{ height: '300px', position: 'relative' }}>
+    <div className="chart-wrapper" style={{ height: '300px' }}>
+      {!isPrinting && (
+        <button type="button" className="chart-snapshot-btn"
+          onClick={handleSnapshot} aria-label={`Save ${title} as PNG`} title="Save chart as PNG">
+          📷
+        </button>
+      )}
       <Bar ref={ref} key={title} options={options} data={data} />
     </div>
   );
