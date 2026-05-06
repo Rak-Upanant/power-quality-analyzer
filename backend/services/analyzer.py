@@ -205,4 +205,101 @@ def analyze_full_data(dfs: dict, nominal_voltage: float, isc: float, il: float) 
         "trend_data":         trend_data,
     }
     result["recommendations"] = _generate_recommendations(result)
+    result["mode"] = "full"
     return result
+
+
+# ---------------------------------------------------------------------------
+# Power-consumption-only entry point
+# ---------------------------------------------------------------------------
+
+def analyze_power_only(dfs: dict) -> dict:
+    """
+    Slim analysis pipeline focused on power consumption and trend data.
+
+    - Only the 'Trend' worksheet is required (no Vh / Ah harmonic sheets).
+    - Skips IEEE 519 compliance evaluation, TDD calculation, and harmonic spectrum.
+    - Returns the same overall result shape with `mode="power_only"` so the
+      frontend can render the available subset and hide compliance UI.
+    """
+    df_trend = dfs.get("Trend")
+    if df_trend is None:
+        raise ValueError("Missing required worksheet: 'Trend'.")
+
+    clean_df = build_trend_index(df_trend)
+
+    if len(clean_df.index) >= 2:
+        span = clean_df.index.max() - clean_df.index.min()
+        measurement_duration_days = round(span.total_seconds() / 86400.0, 2)
+    else:
+        measurement_duration_days = 0.0
+
+    def cm(name): return nan_to_zero(to_numeric_safe(clean_df.get(name, pd.Series([]))).mean())
+    def cx(name): return nan_to_zero(to_numeric_safe(clean_df.get(name, pd.Series([]))).max())
+
+    active_power   = to_numeric_safe(clean_df.get("W Total",  pd.Series([0])))
+    apparent_power = to_numeric_safe(clean_df.get("VA Total", pd.Series([0])))
+    pf_series      = active_power / apparent_power.where(apparent_power != 0, np.nan)
+
+    summary_stats = {
+        "u1_rms_avg": cm("U1 RMS"), "u2_rms_avg": cm("U2 RMS"), "u3_rms_avg": cm("U3 RMS"),
+        "v1_rms_avg": cm("V1 RMS"), "v2_rms_avg": cm("V2 RMS"), "v3_rms_avg": cm("V3 RMS"),
+        "a1_rms_avg": cm("A1 RMS"), "a2_rms_avg": cm("A2 RMS"), "a3_rms_avg": cm("A3 RMS"),
+        "a1_rms_max": cx("A1 RMS"), "a2_rms_max": cx("A2 RMS"), "a3_rms_max": cx("A3 RMS"),
+        "active_power_avg":      cm("W Total"),
+        "reactive_power_avg":    cm("var Total"),
+        "apparent_power_avg":    cm("VA Total"),
+        "active_energy_total":   nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("Wh Total",   pd.Series([0]))))),
+        "reactive_energy_total": nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("varh Total", pd.Series([0]))))),
+        "apparent_energy_total": nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("VAh Total",  pd.Series([0]))))),
+        # Harmonic-derived stats are not applicable in power-only mode.
+        "thdv_percent_avg": 0.0,
+        "thdi_percent_avg": 0.0,
+        "power_factor_avg": nan_to_zero(pf_series.mean()),
+    }
+
+    def tl(col): return to_numeric_safe(clean_df.get(col, pd.Series([]))).fillna(0).tolist()
+
+    trend_data = {
+        "timestamps":      clean_df.index.strftime("%Y-%m-%d %H:%M:%S").tolist(),
+        "voltage_ll":      {"U1 RMS": tl("U1 RMS"), "U2 RMS": tl("U2 RMS"), "U3 RMS": tl("U3 RMS")},
+        "voltage_ln":      {"V1 RMS": tl("V1 RMS"), "V2 RMS": tl("V2 RMS"), "V3 RMS": tl("V3 RMS")},
+        "current":         {"A1 RMS": tl("A1 RMS"), "A2 RMS": tl("A2 RMS"), "A3 RMS": tl("A3 RMS")},
+        "active_power":    {"W Total":    tl("W Total")},
+        "reactive_power":  {"var Total":  tl("var Total")},
+        "apparent_power":  {"VA Total":   tl("VA Total")},
+        "active_energy":   {"Wh Total":   tl("Wh Total")},
+        "reactive_energy": {"varh Total": tl("varh Total")},
+        "apparent_energy": {"VAh Total":  tl("VAh Total")},
+        "power_factor":    {"PF1": tl("PF1"), "PF2": tl("PF2"), "PF3": tl("PF3"), "PF Mean": tl("PF Mean")},
+        "frequency":       {"Frequency": tl("Frequency")},
+    }
+
+    # Brief, power-focused recommendation set.
+    pf = summary_stats["power_factor_avg"]
+    recs: list[str] = []
+    if pf and pf < 0.95:
+        recs.append(
+            f"Average power factor is {pf:.3f} — below the recommended 0.95. "
+            "Consider installing capacitor banks or active power factor correction (PFC)."
+        )
+    if not recs:
+        recs.append("No power-consumption issues detected. Continue periodic monitoring.")
+
+    return {
+        "mode":                     "power_only",
+        "thdv_percent":             0.0,
+        "tdd_percent":              0.0,
+        "isc_il_ratio":             0.0,
+        "v_thd_prefix_used":        "V",
+        "measurement_duration_days": measurement_duration_days,
+        "weekly_window_satisfied":  measurement_duration_days >= 7.0,
+        "summary_stats":            summary_stats,
+        "voltage_compliance":       "N/A",
+        "current_compliance":       "N/A",
+        "failing_points":           {},
+        "compliance_detail":        None,
+        "bar_chart_data":           None,
+        "trend_data":               trend_data,
+        "recommendations":          recs,
+    }

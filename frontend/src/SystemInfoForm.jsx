@@ -97,7 +97,8 @@ const IscReferenceTable = () => (
 );
 
 // ─── Main form ────────────────────────────────────────────────────────────────
-const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFileChange, isLoading }) => {
+const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFileChange, isLoading,
+                          analysisMode = 'full', setAnalysisMode }) => {
     const [file,       setFile]       = useState(null);
     const [showIscRef, setShowIscRef] = useState(false);
 
@@ -109,15 +110,34 @@ const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFil
     const ratio    = systemInfo.il > 0 ? systemInfo.isc / systemInfo.il : 0;
     const bracket  = getBracket(ratio);
     const vClass   = getVoltageClass(systemInfo.nominal_voltage);
+    const isPowerOnly = analysisMode === 'power_only';
 
     return (
         <form className="sif-form" onSubmit={handleSubmit}>
             <div className="sif-header">
                 <h2 className="sif-title">⚙ System Parameters at PCC</h2>
                 <p className="sif-subtitle">
-                    Enter the Point of Common Coupling (PCC) parameters — IEEE 519-2022 limits are applied automatically.
+                    {isPowerOnly
+                        ? 'Power-consumption mode: only the Trend sheet is required. Compliance / harmonic analysis is skipped.'
+                        : 'Enter the Point of Common Coupling (PCC) parameters — IEEE 519-2022 limits are applied automatically.'}
                 </p>
             </div>
+
+            {/* ── Mode toggle ─────────────────────────────────────────── */}
+            {setAnalysisMode && (
+                <div className="sif-mode-toggle" role="radiogroup" aria-label="Analysis mode">
+                    <button type="button" role="radio" aria-checked={!isPowerOnly}
+                        className={`sif-mode-btn ${!isPowerOnly ? 'sif-mode-btn--active' : ''}`}
+                        onClick={() => setAnalysisMode('full')}>
+                        ⚡ Full IEEE 519 analysis
+                    </button>
+                    <button type="button" role="radio" aria-checked={isPowerOnly}
+                        className={`sif-mode-btn ${isPowerOnly ? 'sif-mode-btn--active' : ''}`}
+                        onClick={() => setAnalysisMode('power_only')}>
+                        🔌 Power consumption only
+                    </button>
+                </div>
+            )}
 
             {/* ── Three input cards ─────────────────────────────────── */}
             <div className="sif-inputs">
@@ -139,7 +159,8 @@ const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFil
                     <p className="sif-hint">Common: 380 / 400 / 415 V (LV) · 6,600 / 11,000 V (MV)</p>
                 </div>
 
-                {/* Short-Circuit Current */}
+                {/* Short-Circuit Current — hidden in power-only mode */}
+                {!isPowerOnly && (
                 <div className="sif-card">
                     <div className="sif-card-label">
                         <span className="sif-card-icon">⚡</span>
@@ -162,8 +183,10 @@ const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFil
                     </p>
                     {showIscRef && <IscReferenceTable />}
                 </div>
+                )}
 
-                {/* Max Demand IL */}
+                {/* Max Demand IL — hidden in power-only mode */}
+                {!isPowerOnly && (
                 <div className="sif-card">
                     <div className="sif-card-label">
                         <span className="sif-card-icon">📈</span>
@@ -181,10 +204,11 @@ const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFil
                         Per IEEE 519-2022 §3.1 · Use max monthly 15-min demand ÷ 12
                     </p>
                 </div>
+                )}
             </div>
 
             {/* ── Isc/IL result banner ───────────────────────────────── */}
-            {bracket && (
+            {!isPowerOnly && bracket && (
                 <div className="sif-ratio-banner" style={{ background: bracket.bg, borderColor: bracket.color }}>
                     <div className="sif-ratio-left">
                         <span className="sif-ratio-label">Isc / IL</span>
@@ -209,7 +233,7 @@ const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFil
             <button type="submit" className="sif-submit" disabled={isLoading || !file}>
                 {isLoading
                     ? <><span className="loading-spinner" /> Analyzing…</>
-                    : '⚡ Analyze Power Quality'
+                    : isPowerOnly ? '🔌 Analyze Power Consumption' : '⚡ Analyze Power Quality'
                 }
             </button>
         </form>

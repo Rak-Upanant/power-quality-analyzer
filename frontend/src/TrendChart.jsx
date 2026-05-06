@@ -84,6 +84,23 @@ const TrendChart = React.forwardRef(({ datasets, title, yAxisLabel, timestamps }
           tooltipFormat: 'yyyy-MM-dd HH:mm:ss',
           displayFormats: { minute: 'HH:mm', hour: 'HH:mm' },
         },
+        ticks: {
+          // Render two-line tick labels: time on top, date below.
+          // Returning an array from callback creates multi-line labels.
+          autoSkip: true,
+          maxRotation: 0,
+          source: 'auto',
+          callback: function(value) {
+            const d = new Date(value);
+            if (Number.isNaN(d.getTime())) return value;
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            const yyyy = d.getFullYear();
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return [`${hh}:${mm}`, `${yyyy}-${mo}-${dd}`];
+          },
+        },
         title: { display: true, text: 'Time' },
       },
       y: {

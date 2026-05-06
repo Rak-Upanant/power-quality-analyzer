@@ -52,6 +52,9 @@ const AnalysisReport = React.forwardRef(({
     const [showSummaryModal, setShowSummaryModal] = useState(false);
     const [selectedSections, setSelectedSections] = useState(EXPORT_SECTIONS.map(s=>s.id));
 
+    // Power-consumption mode hides compliance / harmonic sections.
+    const isPowerOnly = analysisResult?.mode === 'power_only';
+
     const vhChartRef     = useRef(null);
     const ahChartRef     = useRef(null);
     // [FIX-2] Add chartKey dep so ref Map resets when a new file is analyzed
@@ -337,7 +340,7 @@ const AnalysisReport = React.forwardRef(({
             </button>
         </div>
 
-        {analysisResult.weekly_window_satisfied===false&&(
+        {!isPowerOnly && analysisResult.weekly_window_satisfied===false&&(
             <div className="duration-warning" role="status">
                 ⚠ Measurement spans <strong>{analysisResult.measurement_duration_days} days</strong>.
                 IEEE 519-2022 §4.4 weekly statistics assume a 7-day window — treat compliance verdicts as indicative only.
@@ -347,31 +350,40 @@ const AnalysisReport = React.forwardRef(({
         {/* Compliance Summary */}
         <div className="summary-card">
             <div className="summary-header">
-                <h3>Compliance Summary</h3>
+                <h3>{isPowerOnly ? 'Power Consumption Summary' : 'Compliance Summary'}</h3>
                 <button className="summary-info-btn" onClick={()=>setShowSummaryModal(true)} title="View full summary">
                     📋 Full Details
                 </button>
             </div>
             <div className="summary-grid-new">
                 <div className="summary-col">
-                    <div className="summary-item">
-                        <span className="summary-label">Voltage Compliance</span>
-                        <button className={`compliance-btn ${analysisResult.voltage_compliance==='Pass'?'compliance-btn--pass':'compliance-btn--fail'}`}
-                            onClick={()=>setComplianceModal('voltage')}>
-                            {analysisResult.voltage_compliance==='Pass'?'✅ Pass':'❌ Fail'}
-                            <span className="compliance-btn-hint">→ details</span>
-                        </button>
-                    </div>
-                    <div className="summary-item">
-                        <span className="summary-label">Current Compliance</span>
-                        <button className={`compliance-btn ${analysisResult.current_compliance==='Pass'?'compliance-btn--pass':analysisResult.current_compliance==='N/A'?'compliance-btn--na':'compliance-btn--fail'}`}
-                            onClick={()=>setComplianceModal('current')}>
-                            {analysisResult.current_compliance==='Pass'?'✅ Pass':analysisResult.current_compliance==='N/A'?'— N/A':'❌ Fail'}
-                            <span className="compliance-btn-hint">→ details</span>
-                        </button>
-                    </div>
-                    <SummaryItem label="THDv 95th/10min (LN)" value={analysisResult.thdv_percent.toFixed(2)} unit="%"/>
-                    <SummaryItem label="TDD 95th/10min"        value={analysisResult.tdd_percent.toFixed(2)}  unit="%"/>
+                    {isPowerOnly ? (
+                        <div className="summary-item">
+                            <span className="summary-label">Mode</span>
+                            <span className="compliance-btn compliance-btn--na">🔌 Power consumption only</span>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="summary-item">
+                                <span className="summary-label">Voltage Compliance</span>
+                                <button className={`compliance-btn ${analysisResult.voltage_compliance==='Pass'?'compliance-btn--pass':'compliance-btn--fail'}`}
+                                    onClick={()=>setComplianceModal('voltage')}>
+                                    {analysisResult.voltage_compliance==='Pass'?'✅ Pass':'❌ Fail'}
+                                    <span className="compliance-btn-hint">→ details</span>
+                                </button>
+                            </div>
+                            <div className="summary-item">
+                                <span className="summary-label">Current Compliance</span>
+                                <button className={`compliance-btn ${analysisResult.current_compliance==='Pass'?'compliance-btn--pass':analysisResult.current_compliance==='N/A'?'compliance-btn--na':'compliance-btn--fail'}`}
+                                    onClick={()=>setComplianceModal('current')}>
+                                    {analysisResult.current_compliance==='Pass'?'✅ Pass':analysisResult.current_compliance==='N/A'?'— N/A':'❌ Fail'}
+                                    <span className="compliance-btn-hint">→ details</span>
+                                </button>
+                            </div>
+                            <SummaryItem label="THDv 95th/10min (LN)" value={analysisResult.thdv_percent.toFixed(2)} unit="%"/>
+                            <SummaryItem label="TDD 95th/10min"        value={analysisResult.tdd_percent.toFixed(2)}  unit="%"/>
+                        </>
+                    )}
                 </div>
                 <div className="summary-col">
                     <SummaryItem label="Avg. U1 RMS (LL)" value={analysisResult.summary_stats.u1_rms_avg.toFixed(2)} unit="V"/>
@@ -403,7 +415,7 @@ const AnalysisReport = React.forwardRef(({
             </div>
         </div>
 
-        {analysisResult.bar_chart_data&&<div className="details-card">
+        {!isPowerOnly && analysisResult.bar_chart_data&&<div className="details-card">
             <h3>Harmonic Spectrum Analysis</h3>
             <div className="harmonic-charts-container">
                 <HarmonicBarChart ref={vhChartRef} isPrinting={isPrinting} key={`vh-${chartKey}`}
@@ -420,7 +432,7 @@ const AnalysisReport = React.forwardRef(({
                 <h3>Recommendations</h3>
                 <ul>{analysisResult.recommendations.map((r,i)=><li key={i}>{r}</li>)}</ul>
             </div>}
-            {Object.keys(analysisResult.failing_points).length>0&&<div className="details-card">
+            {!isPowerOnly && Object.keys(analysisResult.failing_points).length>0&&<div className="details-card">
                 <h3>Key Compliance Issues</h3>
                 {Object.entries(analysisResult.failing_points).map(([cat,details])=><div key={cat} className="compliance-category">
                     <h4>{cat}</h4>
@@ -449,7 +461,7 @@ const AnalysisReport = React.forwardRef(({
                 </div>
                 {timeInterval&&<p className="time-interval-display"><strong>Time Interval:</strong> {timeInterval}</p>}
             </div>
-            <TrendTabs activeTrendTab={activeTrendTab} setActiveTrendTab={setActiveTrendTab}/>
+            <TrendTabs activeTrendTab={activeTrendTab} setActiveTrendTab={setActiveTrendTab} isPowerOnly={isPowerOnly}/>
         </div>
 
         {filteredTrendData?(

@@ -1005,6 +1005,10 @@ h1 {
 
 /* ── SystemInfoForm ─────────────────────────────────────────── */
 .sif-form{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:28px 32px;margin-bottom:32px;box-shadow:0 4px 20px rgba(0,0,0,.07)}
+.sif-mode-toggle{display:flex;gap:6px;background:#f1f5f9;padding:4px;border-radius:10px;margin:0 0 20px;width:fit-content}
+.sif-mode-btn{flex:none;padding:8px 16px;background:transparent;border:none;border-radius:7px;font-size:.9rem;font-weight:600;color:#475569;cursor:pointer;transition:background .15s,color .15s}
+.sif-mode-btn:hover{color:#1e293b}
+.sif-mode-btn--active{background:#fff;color:#1e293b;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .sif-header{margin-bottom:20px}
 .sif-title{font-size:1.4rem;font-weight:700;color:#1e293b;margin:0 0 4px}
 .sif-subtitle{font-size:.83rem;color:#64748b;margin:0}
