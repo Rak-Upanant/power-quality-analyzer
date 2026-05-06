@@ -953,6 +953,32 @@ h1 {
 .cdp-na-note{color:#475569;font-style:italic}
 .duration-warning{margin:0 0 16px;padding:10px 14px;border-radius:8px;background:#fef9c3;border:1px solid #fde047;color:#713f12;font-size:.92rem;line-height:1.4}
 
+/* ── Tariff panel (power-only mode) ───────────────────────────── */
+.tariff-panel{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:12px 14px;margin:0 0 16px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}
+.tariff-panel-row{display:flex;align-items:center;gap:8px}
+.tariff-label{font-weight:600;color:#1e293b;font-size:.95rem}
+.tariff-input{padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:.9rem;background:#fff}
+.tariff-input--currency{width:44px;text-align:center}
+.tariff-input--rate{width:90px}
+.tariff-unit{color:#64748b;font-size:.88rem}
+.tariff-result{display:flex;align-items:baseline;gap:8px;margin-left:auto;flex-wrap:wrap}
+.tariff-result-label{color:#64748b;font-size:.85rem}
+.tariff-result-value{font-weight:700;font-size:1.1rem;color:#15803d}
+.tariff-result-detail{color:#94a3b8;font-size:.78rem;font-style:italic}
+
+/* ── Peak demand chip ─────────────────────────────────────────── */
+.peak-demand-chip{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:6px;padding:8px 12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:.88rem;margin:0 0 12px}
+.peak-demand-chip strong{color:#7c2d12}
+
+/* ── Demand profile chart wrapper ─────────────────────────────── */
+.demand-profile-wrap{height:300px;position:relative}
+
+/* ── Export buttons row ───────────────────────────────────────── */
+.export-buttons{display:flex;gap:10px;flex-wrap:wrap}
+.export-csv-button{padding:10px 16px;background:#fff;border:1px solid #cbd5e1;color:#1e293b;border-radius:8px;font-weight:600;cursor:pointer;transition:background .15s}
+.export-csv-button:hover:not(:disabled){background:#f1f5f9}
+.export-csv-button:disabled{opacity:.6;cursor:not-allowed}
+
 /* ── Summary header + "Full Details" btn ───────────────────── */
 .summary-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .summary-info-btn{padding:6px 14px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:7px;font-size:.82rem;font-weight:600;cursor:pointer;color:#374151;transition:background .15s}

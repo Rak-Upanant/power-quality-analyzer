@@ -20,6 +20,7 @@ export const EXPORT_SECTIONS = [
 // (title, file, period, summary, recommendations) is always emitted and is
 // not represented as a toggle here.
 export const POWER_ONLY_EXPORT_SECTIONS = [
+    { id:'demand_profile', label:'Demand Profile (Load Duration Curve)' },
     { id:'harmonics',      label:'Harmonic Spectrums (no limit line)' },
     { id:'rms',            label:'RMS Trends' },
     { id:'power',          label:'Power Trends' },

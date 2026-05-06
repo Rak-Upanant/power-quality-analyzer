@@ -19,6 +19,37 @@ from core.limits import get_current_limit_for_harmonic, get_current_limit_row
 # Recommendations
 # ---------------------------------------------------------------------------
 
+def _peak_demand_window(clean_df, window_minutes: int = 15) -> dict | None:
+    """
+    Find the highest rolling-mean active-power window of `window_minutes` length.
+
+    Returns a dict with the window's start/end timestamps and average power (W),
+    or None if 'W Total' is unavailable or the dataset is too short.
+    """
+    if "W Total" not in clean_df.columns:
+        return None
+    series = to_numeric_safe(clean_df["W Total"])
+    if series.empty:
+        return None
+    try:
+        rolled = series.rolling(f"{window_minutes}min", min_periods=1).mean()
+    except (TypeError, ValueError):
+        return None
+    if rolled.empty:
+        return None
+    end_ts = rolled.idxmax()
+    if pd.isna(end_ts):
+        return None
+    avg_w = float(rolled.loc[end_ts])
+    start_ts = end_ts - pd.Timedelta(minutes=window_minutes)
+    return {
+        "window_minutes": window_minutes,
+        "avg_w":          nan_to_zero(avg_w),
+        "start":          start_ts.strftime("%Y-%m-%d %H:%M:%S"),
+        "end":            end_ts.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
 def _generate_recommendations(result: dict) -> list[str]:
     recs = []
     if result.get("voltage_compliance") == "Fail":
@@ -205,6 +236,7 @@ def analyze_full_data(dfs: dict, nominal_voltage: float, isc: float, il: float) 
         "trend_data":         trend_data,
     }
     result["recommendations"] = _generate_recommendations(result)
+    result["peak_demand"] = _peak_demand_window(clean_df, 15)
     result["mode"] = "full"
     return result
 
@@ -331,4 +363,5 @@ def analyze_power_only(dfs: dict) -> dict:
         "bar_chart_data":           bar_chart_data,
         "trend_data":               trend_data,
         "recommendations":          recs,
+        "peak_demand":              _peak_demand_window(clean_df, 15),
     }

@@ -88,6 +88,10 @@ const TrendChart = React.forwardRef(({ datasets, title, yAxisLabel, timestamps }
           // Render two-line tick labels: time on top, date below.
           // Returning an array from callback creates multi-line labels.
           autoSkip: true,
+          // Roughly halve the number of ticks compared to chart.js default
+          // (~10–11) so labels have more breathing room.
+          maxTicksLimit: 6,
+          autoSkipPadding: 24,
           maxRotation: 0,
           source: 'auto',
           callback: function(value) {
