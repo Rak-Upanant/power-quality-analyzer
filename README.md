@@ -343,3 +343,35 @@ Thumbs.db
 | Adding new trend chart groups | Easy |
 | Modifying compliance evaluation | Hard |
 | Refactoring backend core modules | Hard |
+
+---
+
+## 13. Backlog / Roadmap
+
+Ideas that are NOT yet implemented. Listed roughly in priority order — useful guidance for the next contributor or for future work on the **Power consumption** mode.
+
+### Power-consumption mode enhancements
+
+| Idea | Notes |
+|---|---|
+| **Time-of-day energy heatmap** | 24×7 grid coloured by avg active power — instantly shows day/night and weekend vs weekday behaviour. Pure frontend computation from `trend_data.active_power["W Total"]`. |
+| **Phase load balance score** | Compare avg `A1/A2/A3 RMS`; flag any phase >15% off the mean. Big efficiency win for facilities managers. Surface as a chip in the summary card. |
+| **Reactive energy ratio + capacitor sizing** | Compute `varh_total / Wh_total` (≈ tan φ). If >0.5, recommend specific kvar of capacitors to reach a target PF (e.g. 0.95). |
+| **Anomaly markers on trend charts** | Auto-detect step changes / outliers in Active Power (>3σ deviation), highlight them with a label. Spots stuck loads, scheduling issues, etc. |
+| **Frequency stats in summary** | Add min/max/avg of `Frequency` column (already in `trend_data`). One-line addition to the summary card. |
+| **Compare two files (delta report)** | Drop two CA8335 exports, get an energy / cost / PF delta. Useful for "before vs after we installed VFDs". Bigger feature — needs a second-file UI flow. |
+| **Peak / off-peak tariff** | Extend the tariff panel to support time-of-use (peak hours / weekend rates) instead of a single flat rate. |
+| **XLSX multi-sheet export** | The current "Export CSV" emits a single flat CSV. A multi-sheet `.xlsx` (one sheet per group: Voltage / Current / Power / Energy / Harmonics) would map better to the report structure. Use SheetJS / xlsx with dynamic import to keep the initial bundle small. |
+| **Top-N harmonic order summary** | A small table on the cover: "Worst voltage harmonic: H5 @ 4.2%". Powers from the existing `bar_chart_data`. |
+| **kVA capacity utilisation** | If transformer rating is known (optional input), show `apparent_power_avg / rated_kVA` over time — sizing / overload risk indicator. |
+
+### General UX / engineering follow-ups
+
+| Idea | Notes |
+|---|---|
+| **Single source of truth for limit tables** | `frontend/src/constants.js` and `backend/core/limits.py` both hold IEEE 519 Table 2. Have the backend ship the per-order limit array in the `/analyze/` response so the frontend never duplicates them. |
+| **Compliance Summary information hierarchy** | Today the verdict is visually equal to "Avg. U2 RMS (LL)". Promote the verdicts into a hero band; collapse per-phase RMS averages into the "Full Details" modal. |
+| **A11y on modals** | `.modal-overlay` lacks `role="dialog"`, `aria-modal`, focus trap, and ESC handler. Compliance / summary buttons lack `:focus-visible` styles. |
+| **Replace emoji glyphs with an icon set** | Heavy use of 📄 📋 ✅ ❌ ⚡ 🔌 etc. for primary affordances. Inconsistent across OS / browser; not predictable for screen readers. Swap to `lucide-react` (already a common companion to recharts/chart.js). |
+| **Print stylesheet (`@media print`)** | The PDF export uses jsPDF, but there's no fallback for native browser Print. Adding `@media print` rules would let users print directly without going through PDF generation. |
+| **Bundle size** | The single `index-*.js` chunk is >1 MB. Code-split jsPDF + html2canvas + chart.js with `manualChunks` so the initial paint is faster. |

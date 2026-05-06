@@ -11,6 +11,9 @@ import ComplianceModal from './components/ComplianceModal';
 import SummaryInfoModal from './components/SummaryInfoModal';
 import ExportModal from './components/ExportModal';
 import SummaryItem from './components/SummaryItem';
+import TariffPanel, { useTariff } from './components/TariffPanel';
+import DemandProfileChart from './components/DemandProfileChart';
+import { trendDataToCsv, downloadCsv } from './utils/csvExport';
 
 // ─── Export sections ──────────────────────────────────────────────────────────
 // Removed: inline EXPORT_SECTIONS definition
@@ -65,6 +68,10 @@ const AnalysisReport = React.forwardRef(({
 
     const vhChartRef     = useRef(null);
     const ahChartRef     = useRef(null);
+    const demandProfileRef = useRef(null);
+
+    // Tariff state (currency + ฿/kWh) — persisted in localStorage.
+    const [tariff, setTariff] = useTariff();
     // [FIX-2] Add chartKey dep so ref Map resets when a new file is analyzed
     const trendChartRefs = useMemo(()=>new Map(),[chartKey]);
 
@@ -249,10 +256,13 @@ const AnalysisReport = React.forwardRef(({
         const tW = dW - mg*2; const cH = 7; const W = [80, tW - 80];
         doc.setFontSize(11); doc.setFont(undefined,'bold'); doc.text('Power Consumption Summary', mg, y); y+=8;
         doc.setFontSize(9);
+        const kWh = (s.active_energy_total || 0) / 1000;
+        const cost = kWh * (Number(tariff.ratePerKwh) || 0);
         const rows = [
             ['Total Active Energy',   fmtVal(s.active_energy_total,'Wh')],
             ['Total Reactive Energy', fmtVal(s.reactive_energy_total,'varh')],
             ['Total Apparent Energy', fmtVal(s.apparent_energy_total,'VAh')],
+            ['Estimated Cost',        `${tariff.currency} ${cost.toLocaleString(undefined,{maximumFractionDigits:2})}  (${kWh.toFixed(0)} kWh @ ${tariff.currency}${tariff.ratePerKwh}/kWh)`],
             ['Avg. Active Power',     fmtVal(s.active_power_avg,'W')],
             ['Avg. Reactive Power',   fmtVal(s.reactive_power_avg,'var')],
             ['Avg. Apparent Power',   fmtVal(s.apparent_power_avg,'VA')],
@@ -262,6 +272,13 @@ const AnalysisReport = React.forwardRef(({
             ['THDv 95th (LN, max)',   `${analysisResult.thdv_percent.toFixed(2)} %`],
             ['THDi 95th (max)',       `${(s.thdi_percent_avg||0).toFixed(2)} %`],
         ];
+        const pd = analysisResult.peak_demand;
+        if (pd) {
+            rows.splice(4, 0, [
+                `Peak ${pd.window_minutes}-min Demand`,
+                `${(pd.avg_w/1000).toFixed(1)} kW (${pd.start} → ${pd.end})`,
+            ]);
+        }
         rows.forEach(([l,v]) => { pdfRow(doc, mg, tW, cH, [l, v], W, y, false, false); y += cH; });
         return y + 4;
     };
@@ -304,6 +321,14 @@ const AnalysisReport = React.forwardRef(({
         return y;
     };
 
+    // ─── CSV export handler ──────────────────────────────────────────────────
+    const handleExportCSV = () => {
+        const csv = trendDataToCsv(filteredTrendData);
+        if (!csv) return;
+        const base = (analysisResult.fileName || 'trend-data').replace(/\.xlsx$/i, '') + '-trend';
+        downloadCsv(csv, base);
+    };
+
     // ─── Export handler ───────────────────────────────────────────────────────
     const handleExportPDF = () => {
         setShowExportModal(false); setIsPrinting(true);
@@ -319,6 +344,12 @@ const AnalysisReport = React.forwardRef(({
                 if (isPowerOnly) {
                     // ── Power-consumption PDF ────────────────────────────────
                     y = drawPowerCover(doc, mg, dW);
+
+                    if (has('demand_profile') && demandProfileRef.current) {
+                        doc.addPage(); y = mg;
+                        secTitle('Demand Profile (Load Duration Curve)');
+                        drawChart(demandProfileRef, 185, 95);
+                    }
 
                     if (has('harmonics') && analysisResult.bar_chart_data) {
                         doc.addPage(); y = mg;
@@ -449,9 +480,16 @@ const AnalysisReport = React.forwardRef(({
 
         <div className="report-header">
             <h2>Analysis Results for: {analysisResult.fileName}</h2>
-            <button className="export-button" onClick={()=>setShowExportModal(true)} disabled={isPrinting}>
-                {isPrinting?'Generating…':'📄 Export as PDF'}
-            </button>
+            <div className="export-buttons">
+                <button className="export-csv-button" onClick={handleExportCSV}
+                    disabled={isPrinting||!filteredTrendData?.timestamps?.length}
+                    title="Download the filtered trend data as a CSV (opens in Excel)">
+                    📊 Export CSV
+                </button>
+                <button className="export-button" onClick={()=>setShowExportModal(true)} disabled={isPrinting}>
+                    {isPrinting?'Generating…':'📄 Export as PDF'}
+                </button>
+            </div>
         </div>
 
         {!isPowerOnly && analysisResult.weekly_window_satisfied===false&&(
@@ -469,6 +507,20 @@ const AnalysisReport = React.forwardRef(({
                     📋 Full Details
                 </button>
             </div>
+
+            {isPowerOnly && (
+                <TariffPanel tariff={tariff} setTariff={setTariff}
+                    activeEnergyWh={analysisResult.summary_stats.active_energy_total}/>
+            )}
+
+            {analysisResult.peak_demand && (
+                <div className="peak-demand-chip">
+                    📈 <strong>Peak {analysisResult.peak_demand.window_minutes}-min demand:</strong>
+                    <span>{(analysisResult.peak_demand.avg_w/1000).toFixed(1)} kW</span>
+                    <span style={{color:'#9a3412',opacity:.85}}>·</span>
+                    <span>{analysisResult.peak_demand.start} → {analysisResult.peak_demand.end}</span>
+                </div>
+            )}
             <div className="summary-grid-new">
                 <div className="summary-col">
                     {isPowerOnly ? (
@@ -528,6 +580,14 @@ const AnalysisReport = React.forwardRef(({
                 </div>
             </div>
         </div>
+
+        {isPowerOnly && filteredTrendData?.active_power?.['W Total']?.length > 0 && (
+            <div className="details-card">
+                <h3>Demand Profile</h3>
+                <DemandProfileChart ref={demandProfileRef} isPrinting={isPrinting}
+                    activePowerSeries={filteredTrendData.active_power['W Total']}/>
+            </div>
+        )}
 
         {analysisResult.bar_chart_data&&<div className="details-card">
             <h3>Harmonic Spectrum Analysis{isPowerOnly && <span className="cdp-na-note"> — limits hidden in power-consumption mode</span>}</h3>
