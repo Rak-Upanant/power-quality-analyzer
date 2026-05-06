@@ -19,8 +19,8 @@ _executor = ThreadPoolExecutor()
 
 @router.post("/analyze/")
 async def analyze_power_data(
-    nominal_voltage: float,
     file: UploadFile = File(...),
+    nominal_voltage: float | None = None,
     isc: float | None = None,
     il: float | None = None,
     mode: Literal["full", "power_only"] = Query("full"),
@@ -30,13 +30,15 @@ async def analyze_power_data(
 
     Query params
     ------------
-    nominal_voltage : float                — PCC nominal voltage in volts (always required)
-    isc             : float (optional)     — Max short-circuit current (A); required for `mode=full`
-    il              : float (optional)     — Max demand load current IL (A); required for `mode=full`
+    nominal_voltage : float (optional) — PCC nominal voltage in volts; required for `mode=full`
+    isc             : float (optional) — Max short-circuit current (A); required for `mode=full`
+    il              : float (optional) — Max demand load current IL (A); required for `mode=full`
     mode            : "full" | "power_only" — Defaults to "full" (IEEE 519 compliance).
                                               "power_only" runs a slim pipeline focused on
                                               power consumption / energy / RMS trends and skips
-                                              compliance, TDD, and harmonic spectrum analysis.
+                                              compliance and TDD. Vh / Ah harmonic sheets are
+                                              loaded opportunistically so the harmonic spectrum
+                                              and THD trends can still be reported when present.
     """
     # ── 1. File-type guard ────────────────────────────────────────────────────
     if not file.filename.endswith(".xlsx"):
@@ -46,9 +48,9 @@ async def analyze_power_data(
         )
 
     # ── 2. Parameter sanity ───────────────────────────────────────────────────
-    if nominal_voltage <= 0:
-        raise HTTPException(status_code=422, detail="nominal_voltage must be > 0.")
     if mode == "full":
+        if nominal_voltage is None or nominal_voltage <= 0:
+            raise HTTPException(status_code=422, detail="In 'full' mode, nominal_voltage is required and must be > 0.")
         if isc is None or il is None or isc <= 0 or il <= 0:
             raise HTTPException(
                 status_code=422,
@@ -60,8 +62,16 @@ async def analyze_power_data(
 
         # ── 3. Parse sheets ───────────────────────────────────────────────────
         try:
-            required = ("Trend",) if mode == "power_only" else None
-            all_sheets = load_sheets(contents, required=required)
+            if mode == "power_only":
+                # Trend is required; harmonic sheets are best-effort.
+                all_sheets = load_sheets(contents, required=("Trend",))
+                try:
+                    extra = load_sheets(contents, required=("Vh Harmonic %", "Ah Harmonic %"))
+                    all_sheets.update(extra)
+                except ValueError:
+                    pass
+            else:
+                all_sheets = load_sheets(contents)
         except ValueError as ve:
             raise HTTPException(status_code=400, detail=str(ve))
 

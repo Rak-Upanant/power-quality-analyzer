@@ -16,6 +16,18 @@ export const EXPORT_SECTIONS = [
     { id:'param_guide',    label:'Parameter Reference Guide' },
 ];
 
+// Power-consumption mode hides anything compliance-related. The cover page
+// (title, file, period, summary, recommendations) is always emitted and is
+// not represented as a toggle here.
+export const POWER_ONLY_EXPORT_SECTIONS = [
+    { id:'harmonics',      label:'Harmonic Spectrums (no limit line)' },
+    { id:'rms',            label:'RMS Trends' },
+    { id:'power',          label:'Power Trends' },
+    { id:'energy',         label:'Energy Trends' },
+    { id:'harmonic',       label:'Harmonic Trends' },
+    { id:'power_factor',   label:'Power Factor Trends' },
+];
+
 export const PARAM_GROUPS = [
     {group:'Voltage (LL/LN)',            params:'U1/U2/U3 RMS, V1/V2/V3 RMS',           purpose:'Basic voltage levels + sag/swell detection'},
     {group:'Voltage Quality',            params:'U1/U2/U3 THD, V1/V2/V3 THD, Vunb',     purpose:'Harmonic distortion, unbalance'},

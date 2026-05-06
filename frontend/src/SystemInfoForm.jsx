@@ -134,12 +134,13 @@ const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFil
                     <button type="button" role="radio" aria-checked={isPowerOnly}
                         className={`sif-mode-btn ${isPowerOnly ? 'sif-mode-btn--active' : ''}`}
                         onClick={() => setAnalysisMode('power_only')}>
-                        🔌 Power consumption only
+                        🔌 Power consumption
                     </button>
                 </div>
             )}
 
-            {/* ── Three input cards ─────────────────────────────────── */}
+            {/* ── Three input cards (hidden entirely in power-only mode) ─── */}
+            {!isPowerOnly && (
             <div className="sif-inputs">
 
                 {/* Nominal Voltage */}
@@ -159,8 +160,7 @@ const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFil
                     <p className="sif-hint">Common: 380 / 400 / 415 V (LV) · 6,600 / 11,000 V (MV)</p>
                 </div>
 
-                {/* Short-Circuit Current — hidden in power-only mode */}
-                {!isPowerOnly && (
+                {/* Short-Circuit Current */}
                 <div className="sif-card">
                     <div className="sif-card-label">
                         <span className="sif-card-icon">⚡</span>
@@ -183,10 +183,8 @@ const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFil
                     </p>
                     {showIscRef && <IscReferenceTable />}
                 </div>
-                )}
 
-                {/* Max Demand IL — hidden in power-only mode */}
-                {!isPowerOnly && (
+                {/* Max Demand IL */}
                 <div className="sif-card">
                     <div className="sif-card-label">
                         <span className="sif-card-icon">📈</span>
@@ -204,8 +202,8 @@ const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFil
                         Per IEEE 519-2022 §3.1 · Use max monthly 15-min demand ÷ 12
                     </p>
                 </div>
-                )}
             </div>
+            )}
 
             {/* ── Isc/IL result banner ───────────────────────────────── */}
             {!isPowerOnly && bracket && (

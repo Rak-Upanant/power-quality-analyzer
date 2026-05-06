@@ -5,10 +5,11 @@ export const analyzePowerQuality = async (file, systemInfo, mode = 'full') => {
   const formData = new FormData();
   formData.append('file', file);
 
-  // In power-only mode, isc/il are not used by the backend — omit them so the
-  // request is accepted even when the user has not supplied valid values.
-  const query = { nominal_voltage: systemInfo.nominal_voltage, mode };
+  // Power-only mode does not need nominal_voltage / isc / il — omit them so
+  // users can analyze a file without filling system parameters.
+  const query = { mode };
   if (mode === 'full') {
+    query.nominal_voltage = systemInfo.nominal_voltage;
     query.isc = systemInfo.isc;
     query.il = systemInfo.il;
   }
