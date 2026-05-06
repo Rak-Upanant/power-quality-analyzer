@@ -78,14 +78,27 @@ SHEET_HEADER_MAP = {
 }
 
 
-def load_sheets(file_bytes: bytes) -> dict[str, pd.DataFrame]:
+def load_sheets(file_bytes: bytes, required: tuple[str, ...] | None = None) -> dict[str, pd.DataFrame]:
     """
-    Load all required worksheets from the uploaded .xlsx bytes.
-    Returns a dict keyed by sheet name.
-    Raises ValueError if a required sheet is missing.
+    Load worksheets from the uploaded .xlsx bytes.
+
+    Parameters
+    ----------
+    file_bytes : raw .xlsx contents
+    required   : optional tuple of sheet names that MUST be present. Defaults to
+                 all sheets in SHEET_HEADER_MAP. Pass ("Trend",) for power-only
+                 analysis where harmonic sheets are not needed.
+
+    Returns dict keyed by sheet name. Raises ValueError if a required sheet is missing.
     """
+    if required is None:
+        required = tuple(SHEET_HEADER_MAP.keys())
+
     sheets: dict[str, pd.DataFrame] = {}
-    for sheet_name, header_row in SHEET_HEADER_MAP.items():
+    for sheet_name in required:
+        if sheet_name not in SHEET_HEADER_MAP:
+            raise ValueError(f"Unknown sheet '{sheet_name}'.")
+        header_row = SHEET_HEADER_MAP[sheet_name]
         try:
             sheets[sheet_name] = pd.read_excel(
                 io.BytesIO(file_bytes),

@@ -17,6 +17,7 @@ function App() {
     isc: 10000,
     il: 500,
   });
+  const [analysisMode, setAnalysisMode] = useState('full'); // 'full' | 'power_only'
   const [analysisResult, setAnalysisResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -52,8 +53,11 @@ function App() {
     setAnalysisResult(null);
 
     try {
-      const result = await analyzePowerQuality(file, systemInfo);
+      const result = await analyzePowerQuality(file, systemInfo, analysisMode);
       setAnalysisResult(result);
+      // In power-only mode the 'rms' tab is fine, but harmonic-related tabs
+      // are not rendered — pre-select 'power' so users land on relevant data.
+      if (analysisMode === 'power_only') setActiveTrendTab('power');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -67,12 +71,14 @@ function App() {
     <div className="container">
       <h1>Power Quality Analyzer (IEEE519-2022)</h1>
 
-      <SystemInfoForm 
+      <SystemInfoForm
         systemInfo={systemInfo}
         handleInputChange={handleInputChange}
         handleSubmit={handleSubmit}
         handleFileChange={handleFileChange}
         isLoading={isLoading}
+        analysisMode={analysisMode}
+        setAnalysisMode={setAnalysisMode}
       />
 
       {error && <div className="error-message">{error}</div>}
