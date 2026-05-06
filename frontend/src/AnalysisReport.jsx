@@ -6,7 +6,7 @@ import TrendTabs from './TrendTabs';
 import jsPDF from 'jspdf';
 import { getVoltageLimit, getCurrentLimitData } from './utils';
 // Import extracted constants and components
-import { EXPORT_SECTIONS, PARAM_GROUPS, fmtEnergy, fmtPower, fmtVal, pct } from './constants/reportConstants';
+import { EXPORT_SECTIONS, POWER_ONLY_EXPORT_SECTIONS, PARAM_GROUPS, fmtEnergy, fmtPower, fmtVal, pct } from './constants/reportConstants';
 import ComplianceModal from './components/ComplianceModal';
 import SummaryInfoModal from './components/SummaryInfoModal';
 import ExportModal from './components/ExportModal';
@@ -50,10 +50,18 @@ const AnalysisReport = React.forwardRef(({
     const [showExportModal,  setShowExportModal]  = useState(false);
     const [complianceModal,  setComplianceModal]  = useState(null);
     const [showSummaryModal, setShowSummaryModal] = useState(false);
-    const [selectedSections, setSelectedSections] = useState(EXPORT_SECTIONS.map(s=>s.id));
 
-    // Power-consumption mode hides compliance / harmonic sections.
-    const isPowerOnly = analysisResult?.mode === 'power_only';
+    // Power-consumption mode hides compliance / IEEE sections.
+    const isPowerOnly      = analysisResult?.mode === 'power_only';
+    const exportSections   = isPowerOnly ? POWER_ONLY_EXPORT_SECTIONS : EXPORT_SECTIONS;
+    const [selectedSections, setSelectedSections] = useState(exportSections.map(s=>s.id));
+
+    // When the result mode changes (new file analyzed), reset the selection
+    // to the full default for the active mode.
+    React.useEffect(() => {
+        setSelectedSections(exportSections.map(s => s.id));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isPowerOnly]);
 
     const vhChartRef     = useRef(null);
     const ahChartRef     = useRef(null);
@@ -223,6 +231,79 @@ const AnalysisReport = React.forwardRef(({
         return y+nL.length*5+10;
     };
 
+    // ─── Period helpers (used by power-only cover) ───────────────────────────
+    const _periodInfo = () => {
+        const ts = analysisResult?.trend_data?.timestamps || [];
+        if (ts.length === 0) return null;
+        const start = ts[0];
+        const end = ts[ts.length - 1];
+        const days = analysisResult.measurement_duration_days ?? 0;
+        const totalSec = Math.max(0, Math.round(days * 86400));
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        return { start, end, days, interval: `${days} days (${h} h ${m} min)` };
+    };
+
+    const drawPowerSummarySection = (doc, mg, dW, y) => {
+        const s = analysisResult.summary_stats;
+        const tW = dW - mg*2; const cH = 7; const W = [80, tW - 80];
+        doc.setFontSize(11); doc.setFont(undefined,'bold'); doc.text('Power Consumption Summary', mg, y); y+=8;
+        doc.setFontSize(9);
+        const rows = [
+            ['Total Active Energy',   fmtVal(s.active_energy_total,'Wh')],
+            ['Total Reactive Energy', fmtVal(s.reactive_energy_total,'varh')],
+            ['Total Apparent Energy', fmtVal(s.apparent_energy_total,'VAh')],
+            ['Avg. Active Power',     fmtVal(s.active_power_avg,'W')],
+            ['Avg. Reactive Power',   fmtVal(s.reactive_power_avg,'var')],
+            ['Avg. Apparent Power',   fmtVal(s.apparent_power_avg,'VA')],
+            ['Avg. Power Factor',     s.power_factor_avg.toFixed(3)],
+            ['Max A1 / A2 / A3 RMS',  `${s.a1_rms_max.toFixed(1)} / ${s.a2_rms_max.toFixed(1)} / ${s.a3_rms_max.toFixed(1)} A`],
+            ['Avg. V1 / V2 / V3 RMS', `${s.v1_rms_avg.toFixed(1)} / ${s.v2_rms_avg.toFixed(1)} / ${s.v3_rms_avg.toFixed(1)} V`],
+            ['THDv 95th (LN, max)',   `${analysisResult.thdv_percent.toFixed(2)} %`],
+            ['THDi 95th (max)',       `${(s.thdi_percent_avg||0).toFixed(2)} %`],
+        ];
+        rows.forEach(([l,v]) => { pdfRow(doc, mg, tW, cH, [l, v], W, y, false, false); y += cH; });
+        return y + 4;
+    };
+
+    const drawPowerCover = (doc, mg, dW) => {
+        let y = mg;
+        doc.setFontSize(18); doc.setFont(undefined,'bold');
+        doc.text('Power Consumption Report', dW/2, y, {align:'center'}); y += 7;
+        doc.setFontSize(11); doc.setFont(undefined,'normal');
+        doc.text(analysisResult.fileName || '', dW/2, y, {align:'center'}); y += 12;
+
+        const period = _periodInfo();
+        if (period) {
+            doc.setFontSize(11); doc.setFont(undefined,'bold');
+            doc.text('Measurement Period', mg, y); y += 7;
+            doc.setFontSize(9); doc.setFont(undefined,'normal');
+            const tW = dW - mg*2;
+            const W = [40, tW - 40];
+            [
+                ['Started',       period.start],
+                ['Ended',         period.end],
+                ['Time Interval', period.interval],
+            ].forEach(([l,v]) => { pdfRow(doc, mg, tW, 7, [l, v], W, y, false, false); y += 7; });
+            y += 6;
+        }
+
+        y = drawPowerSummarySection(doc, mg, dW, y);
+
+        if (analysisResult.recommendations?.length > 0) {
+            y += 2;
+            doc.setFontSize(11); doc.setFont(undefined,'bold');
+            doc.text('Recommendations', mg, y); y += 7;
+            doc.setFontSize(10); doc.setFont(undefined,'normal');
+            analysisResult.recommendations.forEach(r => {
+                const lines = doc.splitTextToSize(`- ${r}`, dW - mg*2);
+                doc.text(lines, mg, y);
+                y += lines.length * 5 + 2;
+            });
+        }
+        return y;
+    };
+
     // ─── Export handler ───────────────────────────────────────────────────────
     const handleExportPDF = () => {
         setShowExportModal(false); setIsPrinting(true);
@@ -235,6 +316,37 @@ const AnalysisReport = React.forwardRef(({
                 const secTitle=t=>{brk(15);doc.setFontSize(14);doc.setFont(undefined,'bold');doc.text(t,mg,y);y+=8;doc.setFont(undefined,'normal');};
                 const drawChart=(ref,w,h)=>{if(ref?.current){const img=ref.current.toBase64Image('image/png',1);brk(h+10);doc.addImage(img,'PNG',(dW-w)/2,y,w,h);y+=h+10;}};
 
+                if (isPowerOnly) {
+                    // ── Power-consumption PDF ────────────────────────────────
+                    y = drawPowerCover(doc, mg, dW);
+
+                    if (has('harmonics') && analysisResult.bar_chart_data) {
+                        doc.addPage(); y = mg;
+                        secTitle('Harmonic Spectrums');
+                        drawChart(vhChartRef, 180, 90);
+                        drawChart(ahChartRef, 180, 90);
+                    }
+
+                    [
+                        {key:'rms',         label:'RMS Trends'},
+                        {key:'power',       label:'Power Trends'},
+                        {key:'energy',      label:'Energy Trends'},
+                        {key:'harmonic',    label:'Harmonic Trends'},
+                        {key:'power_factor',label:'Power Factor Trends'},
+                    ].forEach(({key,label}) => {
+                        if (!has(key)) return;
+                        const grp = chartGroups.filter(g => g.type === key);
+                        const hasC = grp.some(g => trendChartRefs.has(g.title) && trendChartRefs.get(g.title)?.current);
+                        if (!hasC) return;
+                        doc.addPage(); y = mg; secTitle(label);
+                        grp.forEach(g => { const r = trendChartRefs.get(g.title); if (r?.current) drawChart(r, 185, 70); });
+                    });
+
+                    doc.save(`power-consumption-${analysisResult.fileName?.replace('.xlsx','')||'report'}.pdf`);
+                    return;
+                }
+
+                // ── Full IEEE 519 PDF ────────────────────────────────────────
                 doc.setFontSize(18);doc.setFont(undefined,'bold');
                 doc.text('Power Quality Analysis',dW/2,y,{align:'center'});y+=7;
                 doc.setFontSize(11);doc.setFont(undefined,'normal');
@@ -327,7 +439,9 @@ const AnalysisReport = React.forwardRef(({
         {isPrinting&&<div className="printing-overlay"><div className="loading-spinner"/><p>Generating PDF…</p></div>}
 
         <ExportModal isOpen={showExportModal} onClose={()=>setShowExportModal(false)}
-            onExport={handleExportPDF} selectedSections={selectedSections} setSelectedSections={setSelectedSections}/>
+            onExport={handleExportPDF} selectedSections={selectedSections} setSelectedSections={setSelectedSections}
+            sections={exportSections}
+            subtitle={isPowerOnly ? 'Power-consumption export — cover, summary, recommendations and the period are always included.' : undefined}/>
         <ComplianceModal open={complianceModal!==null} onClose={()=>setComplianceModal(null)}
             type={complianceModal} analysisResult={analysisResult}/>
         <SummaryInfoModal open={showSummaryModal} onClose={()=>setShowSummaryModal(false)}
@@ -360,7 +474,7 @@ const AnalysisReport = React.forwardRef(({
                     {isPowerOnly ? (
                         <div className="summary-item">
                             <span className="summary-label">Mode</span>
-                            <span className="compliance-btn compliance-btn--na">🔌 Power consumption only</span>
+                            <span className="compliance-btn compliance-btn--na">🔌 Power consumption</span>
                         </div>
                     ) : (
                         <>
@@ -415,15 +529,17 @@ const AnalysisReport = React.forwardRef(({
             </div>
         </div>
 
-        {!isPowerOnly && analysisResult.bar_chart_data&&<div className="details-card">
-            <h3>Harmonic Spectrum Analysis</h3>
+        {analysisResult.bar_chart_data&&<div className="details-card">
+            <h3>Harmonic Spectrum Analysis{isPowerOnly && <span className="cdp-na-note"> — limits hidden in power-consumption mode</span>}</h3>
             <div className="harmonic-charts-container">
                 <HarmonicBarChart ref={vhChartRef} isPrinting={isPrinting} key={`vh-${chartKey}`}
                     title="Average Voltage Harmonic Spectrum (Overall)" yAxisLabel="THDv (%)"
-                    chartData={{labels:analysisResult.bar_chart_data.labels,data:analysisResult.bar_chart_data.vh_data}} limitData={voltageLimitData}/>
+                    chartData={{labels:analysisResult.bar_chart_data.labels,data:analysisResult.bar_chart_data.vh_data}}
+                    limitData={isPowerOnly ? null : voltageLimitData}/>
                 <HarmonicBarChart ref={ahChartRef} isPrinting={isPrinting} key={`ah-${chartKey}`}
                     title="Average Current Harmonic Spectrum (Overall)" yAxisLabel="THDi (%)"
-                    chartData={{labels:analysisResult.bar_chart_data.labels,data:analysisResult.bar_chart_data.ah_data}} limitData={currentLimitData}/>
+                    chartData={{labels:analysisResult.bar_chart_data.labels,data:analysisResult.bar_chart_data.ah_data}}
+                    limitData={isPowerOnly ? null : currentLimitData}/>
             </div>
         </div>}
 

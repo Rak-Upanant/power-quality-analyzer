@@ -10,7 +10,8 @@ const ALL_TABS = [
 ];
 
 // Tabs that are meaningful when only power consumption was analyzed.
-const POWER_ONLY_TABS = new Set(['rms', 'power', 'energy', 'power_factor']);
+// Harmonic trends are kept (THD-over-time is informational, no compliance line).
+const POWER_ONLY_TABS = new Set(['rms', 'power', 'energy', 'harmonic', 'power_factor']);
 
 const TrendTabs = ({ activeTrendTab, setActiveTrendTab, isPowerOnly = false }) => {
   const tabs = isPowerOnly ? ALL_TABS.filter(t => POWER_ONLY_TABS.has(t.id)) : ALL_TABS;

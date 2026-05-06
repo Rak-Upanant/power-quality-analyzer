@@ -95,10 +95,11 @@ const TrendChart = React.forwardRef(({ datasets, title, yAxisLabel, timestamps }
             if (Number.isNaN(d.getTime())) return value;
             const hh = String(d.getHours()).padStart(2, '0');
             const mm = String(d.getMinutes()).padStart(2, '0');
-            const yyyy = d.getFullYear();
+            const yy = String(d.getFullYear()).slice(-2);
             const mo = String(d.getMonth() + 1).padStart(2, '0');
             const dd = String(d.getDate()).padStart(2, '0');
-            return [`${hh}:${mm}`, `${yyyy}-${mo}-${dd}`];
+            // Compact dd/mm/yy below the time keeps tick widths small.
+            return [`${hh}:${mm}`, `${dd}/${mo}/${yy}`];
           },
         },
         title: { display: true, text: 'Time' },

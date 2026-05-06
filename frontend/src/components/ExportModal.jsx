@@ -1,19 +1,19 @@
 import React from 'react';
 import { EXPORT_SECTIONS } from '../constants/reportConstants';
 
-const ExportModal = ({isOpen,onClose,onExport,selectedSections,setSelectedSections}) => {
+const ExportModal = ({isOpen,onClose,onExport,selectedSections,setSelectedSections,sections=EXPORT_SECTIONS,subtitle}) => {
     if(!isOpen) return null;
-    const toggle = id => setSelectedSections(p => 
+    const toggle = id => setSelectedSections(p =>
         p.includes(id) ? p.filter(s => s !== id) : [...p, id]
     );
-    
+
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-box" onClick={e => e.stopPropagation()}>
                 <h3 className="modal-title">📄 Export PDF — Select Sections</h3>
-                <p className="modal-subtitle">Choose which sections to include.</p>
+                <p className="modal-subtitle">{subtitle || 'Choose which sections to include.'}</p>
                 <div className="modal-actions-row">
-                    <button className="modal-btn-link" onClick={() => setSelectedSections(EXPORT_SECTIONS.map(s => s.id))}>
+                    <button className="modal-btn-link" onClick={() => setSelectedSections(sections.map(s => s.id))}>
                         Select All
                     </button>
                     <button className="modal-btn-link" onClick={() => setSelectedSections([])}>
@@ -21,11 +21,11 @@ const ExportModal = ({isOpen,onClose,onExport,selectedSections,setSelectedSectio
                     </button>
                 </div>
                 <div className="modal-checklist">
-                    {EXPORT_SECTIONS.map(s => (
+                    {sections.map(s => (
                         <label key={s.id} className="modal-check-item">
-                            <input 
-                                type="checkbox" 
-                                checked={selectedSections.includes(s.id)} 
+                            <input
+                                type="checkbox"
+                                checked={selectedSections.includes(s.id)}
                                 onChange={() => toggle(s.id)}
                             />
                             <span>{s.label}</span>

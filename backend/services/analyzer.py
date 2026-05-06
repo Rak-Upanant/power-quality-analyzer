@@ -217,14 +217,18 @@ def analyze_power_only(dfs: dict) -> dict:
     """
     Slim analysis pipeline focused on power consumption and trend data.
 
-    - Only the 'Trend' worksheet is required (no Vh / Ah harmonic sheets).
-    - Skips IEEE 519 compliance evaluation, TDD calculation, and harmonic spectrum.
-    - Returns the same overall result shape with `mode="power_only"` so the
-      frontend can render the available subset and hide compliance UI.
+    - Only the 'Trend' worksheet is required.
+    - Vh / Ah harmonic sheets are used opportunistically: when present, the
+      harmonic spectrum and THD-percentile statistics are reported. When
+      absent, the power-consumption result is returned without them.
+    - Skips IEEE 519 compliance evaluation and TDD calculation.
     """
     df_trend = dfs.get("Trend")
     if df_trend is None:
         raise ValueError("Missing required worksheet: 'Trend'.")
+
+    df_vh = dfs.get("Vh Harmonic %")
+    df_ah = dfs.get("Ah Harmonic %")
 
     clean_df = build_trend_index(df_trend)
 
@@ -241,6 +245,13 @@ def analyze_power_only(dfs: dict) -> dict:
     apparent_power = to_numeric_safe(clean_df.get("VA Total", pd.Series([0])))
     pf_series      = active_power / apparent_power.where(apparent_power != 0, np.nan)
 
+    # ── THD stats (best-effort — Trend sheet usually carries V/A THD columns) ─
+    v_thd_prefix = "V" if any(f"V{p} THD" in clean_df.columns for p in (1, 2, 3)) else "U"
+    voltage_thd_pct = calculate_percentiles(clean_df, v_thd_prefix, column_suffix=" THD")
+    current_thd_pct = calculate_percentiles(clean_df, "A",          column_suffix=" THD")
+    thdv_overall = max(voltage_thd_pct.get(f"{v_thd_prefix}{p} THD_95th_10min", 0.0) for p in (1, 2, 3))
+    thdi_overall = max(current_thd_pct.get(f"A{p} THD_95th_10min",               0.0) for p in (1, 2, 3))
+
     summary_stats = {
         "u1_rms_avg": cm("U1 RMS"), "u2_rms_avg": cm("U2 RMS"), "u3_rms_avg": cm("U3 RMS"),
         "v1_rms_avg": cm("V1 RMS"), "v2_rms_avg": cm("V2 RMS"), "v3_rms_avg": cm("V3 RMS"),
@@ -252,9 +263,8 @@ def analyze_power_only(dfs: dict) -> dict:
         "active_energy_total":   nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("Wh Total",   pd.Series([0]))))),
         "reactive_energy_total": nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("varh Total", pd.Series([0]))))),
         "apparent_energy_total": nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("VAh Total",  pd.Series([0]))))),
-        # Harmonic-derived stats are not applicable in power-only mode.
-        "thdv_percent_avg": 0.0,
-        "thdi_percent_avg": 0.0,
+        "thdv_percent_avg": nan_to_zero(thdv_overall),
+        "thdi_percent_avg": nan_to_zero(thdi_overall),
         "power_factor_avg": nan_to_zero(pf_series.mean()),
     }
 
@@ -271,9 +281,28 @@ def analyze_power_only(dfs: dict) -> dict:
         "active_energy":   {"Wh Total":   tl("Wh Total")},
         "reactive_energy": {"varh Total": tl("varh Total")},
         "apparent_energy": {"VAh Total":  tl("VAh Total")},
-        "power_factor":    {"PF1": tl("PF1"), "PF2": tl("PF2"), "PF3": tl("PF3"), "PF Mean": tl("PF Mean")},
-        "frequency":       {"Frequency": tl("Frequency")},
+        "thdv_percent": {
+            "V1 THD": tl("V1 THD"), "V2 THD": tl("V2 THD"), "V3 THD": tl("V3 THD"),
+            "U1 THD": tl("U1 THD"), "U2 THD": tl("U2 THD"), "U3 THD": tl("U3 THD"),
+        },
+        "thdi_percent":  {"A1 THD": tl("A1 THD"), "A2 THD": tl("A2 THD"), "A3 THD": tl("A3 THD")},
+        "power_factor":  {"PF1": tl("PF1"), "PF2": tl("PF2"), "PF3": tl("PF3"), "PF Mean": tl("PF Mean")},
+        "frequency":     {"Frequency": tl("Frequency")},
     }
+
+    # ── Harmonic spectrum (only if both Vh and Ah sheets are present) ─────────
+    bar_chart_data = None
+    if df_vh is not None and df_ah is not None:
+        vh_indiv = calculate_individual_harmonic_percentiles(df_vh, "V", 95)
+        ah_indiv = calculate_individual_harmonic_percentiles(df_ah, "A", 95)
+        harmonic_orders = list(range(2, 51))
+        vh_bar, ah_bar = [], []
+        for h in harmonic_orders:
+            vh_vals = [vh_indiv.get(f"V{p}h{h}_95th", 0.0) for p in (1, 2, 3)]
+            ah_vals = [ah_indiv.get(f"A{p}h{h}_95th", 0.0) for p in (1, 2, 3)]
+            vh_bar.append(nan_to_zero(float(np.mean(vh_vals))))
+            ah_bar.append(nan_to_zero(float(np.mean(ah_vals))))
+        bar_chart_data = {"labels": harmonic_orders, "vh_data": vh_bar, "ah_data": ah_bar}
 
     # Brief, power-focused recommendation set.
     pf = summary_stats["power_factor_avg"]
@@ -288,10 +317,10 @@ def analyze_power_only(dfs: dict) -> dict:
 
     return {
         "mode":                     "power_only",
-        "thdv_percent":             0.0,
+        "thdv_percent":             nan_to_zero(thdv_overall),
         "tdd_percent":              0.0,
         "isc_il_ratio":             0.0,
-        "v_thd_prefix_used":        "V",
+        "v_thd_prefix_used":        v_thd_prefix,
         "measurement_duration_days": measurement_duration_days,
         "weekly_window_satisfied":  measurement_duration_days >= 7.0,
         "summary_stats":            summary_stats,
@@ -299,7 +328,7 @@ def analyze_power_only(dfs: dict) -> dict:
         "current_compliance":       "N/A",
         "failing_points":           {},
         "compliance_detail":        None,
-        "bar_chart_data":           None,
+        "bar_chart_data":           bar_chart_data,
         "trend_data":               trend_data,
         "recommendations":          recs,
     }
