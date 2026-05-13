@@ -98,7 +98,8 @@ const IscReferenceTable = () => (
 
 // ─── Main form ────────────────────────────────────────────────────────────────
 const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFileChange, isLoading,
-                          analysisMode = 'full', setAnalysisMode }) => {
+                          analysisMode = 'full', setAnalysisMode,
+                          meterFormat = 'auto', setMeterFormat }) => {
     const [file,       setFile]       = useState(null);
     const [showIscRef, setShowIscRef] = useState(false);
 
@@ -224,6 +225,24 @@ const SystemInfoForm = ({ systemInfo, handleInputChange, handleSubmit, handleFil
             {/* ── File upload ────────────────────────────────────────── */}
             <div className="sif-file-section">
                 <p className="sif-file-label">📁 Upload XLSX Data File (Chauvin Arnoux CA8335 export)</p>
+
+                {/* Meter-format selector — auto-detects by sheet names; override forces a specific schema. */}
+                {setMeterFormat && (
+                    <label className="sif-meter-format">
+                        <span className="sif-meter-format-label">Meter S/N</span>
+                        <select
+                            className="sif-meter-format-select"
+                            value={meterFormat}
+                            onChange={(e) => setMeterFormat(e.target.value)}
+                            aria-label="Meter format / serial number"
+                        >
+                            <option value="auto">Auto-detect</option>
+                            <option value="sn210210">C.A 8335 — SN 210210</option>
+                            <option value="sn3007">C.A 8335 — SN 3007</option>
+                        </select>
+                    </label>
+                )}
+
                 <DropZone onFileAccepted={onFileAccepted} currentFile={file} />
             </div>
 

@@ -930,6 +930,10 @@ h1 {
 .sif-ratio-right{display:flex;flex-direction:column;gap:2px;font-size:.85rem}
 .sif-file-section{margin-bottom:20px}
 .sif-file-label{font-weight:600;font-size:.88rem;color:#374151;margin:0 0 8px}
+.sif-meter-format{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.sif-meter-format-label{font-size:.8rem;font-weight:600;color:#475569;min-width:72px}
+.sif-meter-format-select{flex:1;max-width:280px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-size:.85rem;color:#1e293b;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.sif-meter-format-select:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.18)}
 .sif-dropzone{border:2px dashed;border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:6px;outline:none;user-select:none}
 .sif-drop-icon{font-size:2rem}.sif-drop-text{font-size:.9rem;font-weight:600}.sif-drop-sub{font-size:.78rem;color:#9ca3af}
 .sif-submit{width:100%;padding:14px;background:#1e293b;color:#fff;border:none;border-radius:9px;font-size:1rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .2s,transform .1s}
@@ -1071,6 +1075,10 @@ h1 {
 /* File + submit */
 .sif-file-section{margin-bottom:20px}
 .sif-file-label{font-weight:600;font-size:.88rem;color:#374151;margin:0 0 8px}
+.sif-meter-format{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.sif-meter-format-label{font-size:.8rem;font-weight:600;color:#475569;min-width:72px}
+.sif-meter-format-select{flex:1;max-width:280px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font-size:.85rem;color:#1e293b;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.sif-meter-format-select:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.18)}
 .sif-dropzone{border:2px dashed;border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:6px;outline:none;user-select:none}
 .sif-drop-icon{font-size:2rem}.sif-drop-text{font-size:.9rem;font-weight:600}.sif-drop-sub{font-size:.78rem;color:#9ca3af}
 .sif-submit{width:100%;padding:14px;background:#1e293b;color:#fff;border:none;border-radius:9px;font-size:1rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .2s,transform .1s}
