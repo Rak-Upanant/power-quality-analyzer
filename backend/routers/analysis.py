@@ -11,6 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from core.excel_parser import load_sheets
+from core.sn3007_adapter import detect_format, load_sheets_sn3007
 from services.analyzer import analyze_full_data, analyze_power_only
 
 router = APIRouter()
@@ -24,6 +25,7 @@ async def analyze_power_data(
     isc: float | None = None,
     il: float | None = None,
     mode: Literal["full", "power_only"] = Query("full"),
+    meter_format: Literal["auto", "sn3007", "sn210210"] = Query("auto"),
 ):
     """
     Upload a Chauvin Arnoux CA8335 .xlsx export and receive analysis.
@@ -39,6 +41,10 @@ async def analyze_power_data(
                                               compliance and TDD. Vh / Ah harmonic sheets are
                                               loaded opportunistically so the harmonic spectrum
                                               and THD trends can still be reported when present.
+    meter_format    : "auto" | "sn3007" | "sn210210" — Picks the input schema.
+                                              Auto (default) inspects sheet names: a `Recording`
+                                              sheet → SN3007, a `Trend` sheet → SN210210.
+                                              Set explicitly to force one format and skip detection.
     """
     # ── 1. File-type guard ────────────────────────────────────────────────────
     if not file.filename.endswith(".xlsx"):
@@ -60,18 +66,27 @@ async def analyze_power_data(
     try:
         contents = await file.read()
 
-        # ── 3. Parse sheets ───────────────────────────────────────────────────
+        # ── 3. Pick a loader based on meter format ────────────────────────────
+        # SN3007 exports use different sheet/column names; the adapter
+        # normalises them in-memory so the rest of the pipeline is unchanged.
+        fmt = meter_format
+        if fmt == "auto":
+            detected = detect_format(contents)
+            fmt = "sn3007" if detected == "sn3007" else "sn210210"
+        loader = load_sheets_sn3007 if fmt == "sn3007" else load_sheets
+
+        # ── 4. Parse sheets ───────────────────────────────────────────────────
         try:
             if mode == "power_only":
                 # Trend is required; harmonic sheets are best-effort.
-                all_sheets = load_sheets(contents, required=("Trend",))
+                all_sheets = loader(contents, required=("Trend",))
                 try:
-                    extra = load_sheets(contents, required=("Vh Harmonic %", "Ah Harmonic %"))
+                    extra = loader(contents, required=("Vh Harmonic %", "Ah Harmonic %"))
                     all_sheets.update(extra)
                 except ValueError:
                     pass
             else:
-                all_sheets = load_sheets(contents)
+                all_sheets = loader(contents)
         except ValueError as ve:
             raise HTTPException(status_code=400, detail=str(ve))
 

@@ -18,6 +18,7 @@ function App() {
     il: 500,
   });
   const [analysisMode, setAnalysisMode] = useState('full'); // 'full' | 'power_only'
+  const [meterFormat, setMeterFormat] = useState('auto'); // 'auto' | 'sn3007' | 'sn210210'
   const [analysisResult, setAnalysisResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -53,7 +54,7 @@ function App() {
     setAnalysisResult(null);
 
     try {
-      const result = await analyzePowerQuality(file, systemInfo, analysisMode);
+      const result = await analyzePowerQuality(file, systemInfo, analysisMode, meterFormat);
       setAnalysisResult(result);
       // In power-only mode the 'rms' tab is fine, but harmonic-related tabs
       // are not rendered — pre-select 'power' so users land on relevant data.
@@ -79,6 +80,8 @@ function App() {
         isLoading={isLoading}
         analysisMode={analysisMode}
         setAnalysisMode={setAnalysisMode}
+        meterFormat={meterFormat}
+        setMeterFormat={setMeterFormat}
       />
 
       {error && <div className="error-message">{error}</div>}

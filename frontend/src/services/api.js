@@ -1,13 +1,13 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../constants';
 
-export const analyzePowerQuality = async (file, systemInfo, mode = 'full') => {
+export const analyzePowerQuality = async (file, systemInfo, mode = 'full', meterFormat = 'auto') => {
   const formData = new FormData();
   formData.append('file', file);
 
   // Power-only mode does not need nominal_voltage / isc / il — omit them so
   // users can analyze a file without filling system parameters.
-  const query = { mode };
+  const query = { mode, meter_format: meterFormat };
   if (mode === 'full') {
     query.nominal_voltage = systemInfo.nominal_voltage;
     query.isc = systemInfo.isc;
