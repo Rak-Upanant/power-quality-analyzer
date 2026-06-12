@@ -313,13 +313,22 @@ function drawParamGuide(doc, margin, dW, y) {
 function periodInfo(analysisResult) {
     const ts = analysisResult?.trend_data?.timestamps || [];
     if (ts.length === 0) return null;
-    const start = ts[0];
-    const end = ts[ts.length - 1];
-    const days = analysisResult.measurement_duration_days ?? 0;
-    const totalSec = Math.max(0, Math.round(days * 86400));
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    return { start, end, days, interval: `${days} days (${h} h ${m} min)` };
+    // Compute the interval from the actual first/last timestamps rather than the
+    // backend's rounded measurement_duration_days — gives an exact days/h/min
+    // breakdown. Timestamps are "YYYY-MM-DD HH:MM:SS"; swap the space for 'T'
+    // so every browser parses them as ISO reliably.
+    const startMs = new Date(ts[0].replace(' ', 'T'));
+    const endMs = new Date(ts[ts.length - 1].replace(' ', 'T'));
+    const totalMinutes = Math.max(0, Math.floor((endMs - startMs) / 60000));
+    const days = Math.floor(totalMinutes / (24 * 60));
+    const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+    const minutes = totalMinutes % 60;
+    return {
+        start: ts[0],
+        end: ts[ts.length - 1],
+        days,
+        interval: `${days} days ${hours} h ${minutes} min`,
+    };
 }
 
 function drawPowerSummarySection(doc, mg, dW, y, analysisResult, tariff) {
