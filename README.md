@@ -284,6 +284,20 @@ npm run dev
 
 App runs at: `http://localhost:5173`
 
+### 7.3 Running the tests
+
+The backend has a pytest suite that builds synthetic CA8335 workbooks in memory
+(no sample files needed):
+
+```powershell
+cd backend
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Both suites also run automatically on every push / PR via GitHub Actions
+(`.github/workflows/ci.yml`): backend `pytest` + frontend `npm run build`.
+
 ---
 
 ## 8. PDF Export Sections
@@ -407,11 +421,9 @@ Ideas that are NOT yet implemented. Listed roughly in priority order — useful 
 - **`schemas.py` deleted** — was dead code never wired to the route.
 - **Repo hygiene** — removed stray `frontend/test.txt` + empty root `package.json`/lock; `.gitignore` now uses `__pycache__/` so nested caches are ignored.
 
-⬜ **Remaining:**
+- **Automated tests + CI** — 33-test pytest suite (`backend/tests/`) covering statistics, limits, the SN3007 adapter, both analysis pipelines, and HTTP error paths, using self-contained synthetic workbooks. GitHub Actions runs `pytest` + `npm run build` on every push/PR.
 
-| Item | Notes |
-|---|---|
-| **Automated tests + CI** | Zero tests today. Start with pytest fixtures from the two dummy workbooks: `detect_format()`, `load_sheets_sn3007()` column mapping, `analyze_full_data()` smoke, compliance edge cases (>69 kV, Isc/IL brackets). Add a GitHub Action: `pytest` + `npm run build`. |
+⬜ **Remaining:** _(none in Priority 0 — see Priority 1 below)_
 
 ### Priority 1 — PDF report overhaul (designed, not yet built)
 
