@@ -4,26 +4,42 @@ A local web application for analyzing Power Quality (PQ) Excel records from Chau
 
 Designed for plant engineering use: upload PQ meter data, enter PCC parameters, review voltage/current distortion compliance, view trend charts, and export a professional PDF report.
 
+**Two analysis modes:**
+
+| Mode | What it does | Required inputs |
+|---|---|---|
+| ⚡ Full IEEE 519 analysis | Compliance evaluation + all trends | Nominal voltage, Isc, IL |
+| 🔌 Power consumption | Energy / power / cost / demand analysis, no compliance | File only |
+
+**Two supported meter export formats** — selected via the "Meter S/N" dropdown (default: Auto-detect):
+
+| Format | Sheets | Handling |
+|---|---|---|
+| C.A 8335 **SN210210** | `Trend`, `Vh Harmonic %`, `Ah Harmonic %` | Native format, parsed directly |
+| C.A 8335 **SN3007** | `Recording`, `Energy`, `V H Harmonic %`, `A H Harmonic %` | Converted in-memory to the SN210210 schema by `backend/core/sn3007_adapter.py` |
+
 ---
 
 ## 1. Data Flow
 
 ```
-Excel PQ Data (.xlsx)
+Excel PQ Data (.xlsx)  — SN210210 or SN3007 export
         ↓
-SystemInfoForm / Dropzone
+SystemInfoForm  (mode toggle + Meter S/N selector + dropzone)
         ↓
-frontend/src/services/api.js  (Axios POST)
+frontend/src/services/api.js   (Axios POST ?mode=&meter_format=)
         ↓
-backend/routers/analysis.py   (FastAPI endpoint)
+backend/routers/analysis.py    (FastAPI endpoint — detects meter format)
         ↓
-backend/services/analyzer.py  (pipeline orchestrator)
+backend/core/sn3007_adapter.py (SN3007 only: convert to SN210210 schema)
+        ↓
+backend/services/analyzer.py   (full or power-only pipeline)
         ↓
 backend/core/*                 (parse → statistics → compliance)
         ↓
 AnalysisReport.jsx + TrendChart.jsx
         ↓
-PDF Report (jsPDF)
+PDF Report (jsPDF)  /  CSV export
 ```
 
 ---
@@ -46,12 +62,9 @@ power-quality-analyzer/
 │   ├── core/
 │   │   ├── compliance.py           # IEEE 519-2022 pass/fail evaluation (§5.1, §5.3)
 │   │   ├── excel_parser.py         # Sheet ingestion + Thai/Gregorian timestamp parsing
+│   │   ├── sn3007_adapter.py       # SN3007 → SN210210 in-memory format conversion
 │   │   ├── limits.py               # Voltage/current limit tables (Table 1, Table 2)
 │   │   ├── statistics.py           # Percentile aggregation, 10-min resampling
-│   │   └── __init__.py
-│   │
-│   ├── models/
-│   │   ├── schemas.py              # Pydantic request/response models
 │   │   └── __init__.py
 │   │
 │   ├── routers/
@@ -77,20 +90,24 @@ power-quality-analyzer/
         │
         ├── AnalysisReport.jsx      # Report UI + PDF export orchestration
         ├── HarmonicBarChart.jsx    # Harmonic spectrum bar chart (Chart.js)
-        ├── SystemInfoForm.jsx      # PCC input form + drag-and-drop upload
+        ├── SystemInfoForm.jsx      # Mode toggle + meter selector + inputs + dropzone
         ├── TrendChart.jsx          # Time-series line chart with date/time x-axis
         ├── TrendTabs.jsx           # Tab selector for trend chart groups
+        ├── Dropzone.jsx            # Drag-and-drop .xlsx upload zone (react-dropzone)
+        ├── ComplianceDetailPanel.jsx # Inline voltage/current criteria detail panel
         ├── constants.js            # App-level constants (API URL, chart colours)
         ├── utils.js                # getVoltageLimit, getCurrentLimitData, colour helpers
         │
         ├── components/
         │   ├── ComplianceModal.jsx       # Popup: voltage or current criteria detail
         │   ├── CurrentDetailContent.jsx  # Current TDD + harmonic table content
+        │   ├── DemandProfileChart.jsx    # Load duration curve (sorted demand profile)
         │   ├── ExportModal.jsx           # PDF section selector popup
         │   ├── OverPill.jsx              # "4.7× limit" pill badge
         │   ├── PassBadge.jsx             # ✅ Pass / ❌ Fail badge
         │   ├── SummaryInfoModal.jsx      # Full measurement summary popup
         │   ├── SummaryItem.jsx           # Single label+value row in summary card
+        │   ├── TariffPanel.jsx           # Tariff rate input + cost estimate (localStorage)
         │   └── VoltageDetailContent.jsx  # Voltage THD + harmonic table content
         │
         ├── constants/
@@ -99,6 +116,9 @@ power-quality-analyzer/
         ├── hooks/
         │   ├── useFilteredTrendData.js   # Filters trend data by selected date/time range
         │   └── useTimeRange.js           # Manages start/end date-time state
+        │
+        ├── utils/
+        │   └── csvExport.js              # trendDataToCsv() + downloadCsv() (UTF-8 BOM)
         │
         └── services/
             └── api.js                    # analyzePowerQuality() — Axios POST to backend
@@ -113,21 +133,24 @@ power-quality-analyzer/
 | File | Responsibility |
 |---|---|
 | `backend/main.py` | Creates FastAPI app, registers CORS, includes router |
-| `backend/routers/analysis.py` | `POST /analyze/` — receives upload, returns JSON |
-| `backend/services/analyzer.py` | Orchestrates: parse → TDD calc → stats → compliance → trend data |
+| `backend/routers/analysis.py` | `POST /analyze/` — upload, `mode` + `meter_format` params, format dispatch |
+| `backend/services/analyzer.py` | `analyze_full_data()` + `analyze_power_only()` pipelines |
 | `backend/core/excel_parser.py` | `load_sheets()`, `build_trend_index()`, Thai/Gregorian date detection |
+| `backend/core/sn3007_adapter.py` | `detect_format()`, `load_sheets_sn3007()` — SN3007 → SN210210 conversion |
 | `backend/core/limits.py` | `VOLTAGE_LIMITS`, `CURRENT_LIMITS_120V_to_69kV`, lookup helpers |
 | `backend/core/compliance.py` | `evaluate_compliance()` — §5.1 voltage + §5.3 current checks |
-| `backend/core/statistics.py` | `calculate_percentiles()`, 10-min RMS resampling, harmonic percentiles |
-| `backend/models/schemas.py` | `AnalyzeRequest`, `AnalyzeResponse`, `SummaryStats` Pydantic models |
+| `backend/core/statistics.py` | `calculate_percentiles()`, 10-min RMS resampling, harmonic percentiles, energy delta |
 
 ### Frontend
 
 | File | Responsibility |
 |---|---|
-| `App.jsx` | File + systemInfo state, result state, calls `analyzePowerQuality()` |
-| `AnalysisReport.jsx` | Renders compliance summary, charts, modals; generates PDF |
-| `SystemInfoForm.jsx` | Nominal voltage / Isc / IL inputs with smart hints + dropzone |
+| `App.jsx` | File + systemInfo + analysisMode + meterFormat state, calls `analyzePowerQuality()` |
+| `AnalysisReport.jsx` | Renders compliance summary, charts, modals; generates PDF + CSV |
+| `SystemInfoForm.jsx` | Mode toggle, Meter S/N selector, Isc / IL inputs with smart hints + dropzone |
+| `components/TariffPanel.jsx` | `useTariff()` hook — ฿/kWh rate + currency, persisted in localStorage |
+| `components/DemandProfileChart.jsx` | Load duration curve with Peak / Median / Baseload stats |
+| `utils/csvExport.js` | Flattens trend data to RFC-4180 CSV with UTF-8 BOM for Excel |
 | `TrendChart.jsx` | Chart.js `Line` wrapper — time axis, date labels, y-formatter |
 | `HarmonicBarChart.jsx` | Chart.js `Bar` for H2–H50 spectrum with IEEE limit line |
 | `components/ComplianceModal.jsx` | Click-triggered detail popup (voltage or current) |
@@ -142,6 +165,8 @@ power-quality-analyzer/
 
 ## 4. Input Requirements
 
+### SN210210 format (native)
+
 The uploaded `.xlsx` file must contain these sheets from a Chauvin Arnoux CA8335 (or compatible) export:
 
 | Sheet | Purpose |
@@ -149,6 +174,21 @@ The uploaded `.xlsx` file must contain these sheets from a Chauvin Arnoux CA8335
 | `Trend` | Time-series RMS, power, energy, THD, PF — header at row 7 |
 | `Vh Harmonic %` | Voltage harmonic % per order (H0–H50), per phase |
 | `Ah Harmonic %` | Current harmonic % per order (H0–H50), per phase |
+
+In **Power consumption** mode only `Trend` is required — the harmonic sheets are used when present.
+
+### SN3007 format (auto-converted)
+
+SN3007 exports are recognised by their `Recording` sheet and converted in-memory — no manual editing of the workbook is needed. Worksheet and column mapping:
+
+| SN3007 | → SN210210 equivalent |
+|---|---|
+| `Recording` (+ `Energy`, merged by timestamp) | `Trend` |
+| `V H Harmonic %` | `Vh Harmonic %` |
+| `A H Harmonic %` | `Ah Harmonic %` |
+| `U12/U23/U31 RMS`, `P1..PT (W)`, `Cos φ (DPF)`, `FK1-3`, `THDf` | `U1/U2/U3 RMS`, `W1..W Total`, `DPF1..Mean`, `KF1-3`, `THD` |
+
+Notes: THDf (fundamental-referenced, per IEEE 519-2022 §3.1.69) is used, not THDr. MIN/MAX half-cycle columns are not mapped (not consumed by the analyzer). `- - -` placeholders become empty values.
 
 ### Key columns used from `Trend`
 
@@ -167,6 +207,8 @@ The uploaded `.xlsx` file must contain these sheets from a Chauvin Arnoux CA8335
 ---
 
 ## 5. Required User Inputs
+
+> These inputs are required only in **Full IEEE 519 analysis** mode. **Power consumption** mode needs no parameters — just drop the file.
 
 | Input | Meaning | Example |
 |---|---|---|
@@ -246,7 +288,11 @@ App runs at: `http://localhost:5173`
 
 ## 8. PDF Export Sections
 
-The export modal allows selecting any combination of these sections:
+The export modal allows selecting any combination of these sections.
+
+In **Power consumption** mode the PDF uses a dedicated cover (Power Consumption Summary, estimated cost, peak demand window, measurement period, recommendations) and offers only: Demand Profile, Harmonic Spectrums (no IEEE limit line), RMS / Power / Energy / Harmonic / PF Trends. A **CSV export** of the filtered trend data is also available in both modes.
+
+Full-mode sections:
 
 | Section | Contents |
 |---|---|
@@ -321,14 +367,16 @@ Thumbs.db
 
 ## 11. Practical Plant Workflow
 
-1. Export PQ trend data from CA8335 meter as `.xlsx`.
+1. Export PQ trend data from the CA8335 meter (SN210210 or SN3007) as `.xlsx`.
 2. Open the app at `http://localhost:5173`.
-3. Enter PCC parameters: nominal voltage, Isc, IL.
-4. Drop the `.xlsx` file into the upload zone and click **Analyze**.
-5. Review compliance summary — click **Voltage Compliance** or **Current Compliance** to see per-phase criteria detail.
-6. Browse trend charts by tab (RMS / Power / Energy / Harmonics / TDD / PF / Unbalance).
-7. Click **Export as PDF** and select the sections to include.
-8. Use the report for maintenance decisions, filter sizing, or abnormal load investigation.
+3. Pick the analysis mode: **⚡ Full IEEE 519** or **🔌 Power consumption**.
+4. Leave **Meter S/N** on *Auto-detect* (or force SN3007 / SN210210 if needed).
+5. Full mode only: enter PCC parameters — nominal voltage, Isc, IL.
+6. Drop the `.xlsx` file into the upload zone and click **Analyze**.
+7. Review compliance summary — click **Voltage Compliance** or **Current Compliance** to see per-phase criteria detail.
+8. Browse trend charts by tab (RMS / Power / Energy / Harmonics / TDD / PF / Unbalance).
+9. Click **Export as PDF** (and/or **Export CSV**) and select the sections to include.
+10. Use the report for maintenance decisions, filter sizing, or abnormal load investigation.
 
 ---
 
@@ -349,6 +397,25 @@ Thumbs.db
 ## 13. Backlog / Roadmap
 
 Ideas that are NOT yet implemented. Listed roughly in priority order — useful guidance for the next contributor or for future work on the **Power consumption** mode.
+
+### Priority 0 — correctness & hygiene (from June 2026 code review)
+
+✅ **Done** (June 2026):
+- **NaN → 0 bias in percentile stats** — `calculate_percentiles()` and `calculate_individual_harmonic_percentiles()` now drop NaN instead of zero-filling before computing 95th/99th percentiles, so missing/blank readings no longer drag the percentile down toward a false Pass.
+- **Energy totals** — now `last − first` via `get_energy_delta_safe()` (with a guard against counter resets), instead of the raw last value.
+- **Upload size cap** — `routers/analysis.py` rejects uploads over 30 MB before reading them into memory.
+- **`schemas.py` deleted** — was dead code never wired to the route.
+- **Repo hygiene** — removed stray `frontend/test.txt` + empty root `package.json`/lock; `.gitignore` now uses `__pycache__/` so nested caches are ignored.
+
+⬜ **Remaining:**
+
+| Item | Notes |
+|---|---|
+| **Automated tests + CI** | Zero tests today. Start with pytest fixtures from the two dummy workbooks: `detect_format()`, `load_sheets_sn3007()` column mapping, `analyze_full_data()` smoke, compliance edge cases (>69 kV, Isc/IL brackets). Add a GitHub Action: `pytest` + `npm run build`. |
+
+### Priority 1 — PDF report overhaul (designed, not yet built)
+
+Extract PDF generation from `AnalysisReport.jsx` (~350 lines) into `frontend/src/utils/pdfReport.js` with small named helpers, adopting **jspdf-autotable** for tables. Then add: cover page with headline stat cards, page numbers + footer on every page, PASS/FAIL pill badges, plain-language executive summary, traffic-light metric dashboard, 2× resolution chart export. Stretch: table of contents (needs two-pass page numbering). **Thai font embedding** (e.g. Sarabun) is the natural companion — jsPDF built-in fonts cannot render Thai text.
 
 ### Power-consumption mode enhancements
 
