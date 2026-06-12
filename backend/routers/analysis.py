@@ -17,6 +17,10 @@ from services.analyzer import analyze_full_data, analyze_power_only
 router = APIRouter()
 _executor = ThreadPoolExecutor()
 
+# Maximum accepted upload size. CA8335 .xlsx exports are typically a few MB;
+# 30 MB leaves generous headroom while capping memory use per request.
+MAX_UPLOAD_BYTES = 30 * 1024 * 1024  # 30 MB
+
 
 @router.post("/analyze/")
 async def analyze_power_data(
@@ -65,6 +69,15 @@ async def analyze_power_data(
 
     try:
         contents = await file.read()
+
+        # ── 2b. Size guard ────────────────────────────────────────────────────
+        # The whole upload is held in memory; reject anything unreasonably large
+        # so a huge or malicious file cannot exhaust the server's RAM.
+        if len(contents) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum upload size is {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+            )
 
         # ── 3. Pick a loader based on meter format ────────────────────────────
         # SN3007 exports use different sheet/column names; the adapter

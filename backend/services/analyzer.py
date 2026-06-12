@@ -8,7 +8,7 @@ import pandas as pd
 
 from core.excel_parser import build_trend_index
 from core.statistics import (
-    to_numeric_safe, nan_to_zero, get_last_value_safe,
+    to_numeric_safe, nan_to_zero, get_energy_delta_safe,
     calculate_percentiles, calculate_individual_harmonic_percentiles,
 )
 from core.compliance import evaluate_compliance
@@ -161,9 +161,9 @@ def analyze_full_data(dfs: dict, nominal_voltage: float, isc: float, il: float) 
         "active_power_avg":      cm("W Total"),
         "reactive_power_avg":    cm("var Total"),
         "apparent_power_avg":    cm("VA Total"),
-        "active_energy_total":   nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("Wh Total",   pd.Series([0]))))),
-        "reactive_energy_total": nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("varh Total", pd.Series([0]))))),
-        "apparent_energy_total": nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("VAh Total",  pd.Series([0]))))),
+        "active_energy_total":   nan_to_zero(get_energy_delta_safe(to_numeric_safe(clean_df.get("Wh Total",   pd.Series([0]))))),
+        "reactive_energy_total": nan_to_zero(get_energy_delta_safe(to_numeric_safe(clean_df.get("varh Total", pd.Series([0]))))),
+        "apparent_energy_total": nan_to_zero(get_energy_delta_safe(to_numeric_safe(clean_df.get("VAh Total",  pd.Series([0]))))),
         "thdv_percent_avg": nan_to_zero(thdv_overall),
         "thdi_percent_avg": nan_to_zero(thdi_overall),
         "power_factor_avg": nan_to_zero(pf_series.mean()),
@@ -292,9 +292,9 @@ def analyze_power_only(dfs: dict) -> dict:
         "active_power_avg":      cm("W Total"),
         "reactive_power_avg":    cm("var Total"),
         "apparent_power_avg":    cm("VA Total"),
-        "active_energy_total":   nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("Wh Total",   pd.Series([0]))))),
-        "reactive_energy_total": nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("varh Total", pd.Series([0]))))),
-        "apparent_energy_total": nan_to_zero(get_last_value_safe(to_numeric_safe(clean_df.get("VAh Total",  pd.Series([0]))))),
+        "active_energy_total":   nan_to_zero(get_energy_delta_safe(to_numeric_safe(clean_df.get("Wh Total",   pd.Series([0]))))),
+        "reactive_energy_total": nan_to_zero(get_energy_delta_safe(to_numeric_safe(clean_df.get("varh Total", pd.Series([0]))))),
+        "apparent_energy_total": nan_to_zero(get_energy_delta_safe(to_numeric_safe(clean_df.get("VAh Total",  pd.Series([0]))))),
         "thdv_percent_avg": nan_to_zero(thdv_overall),
         "thdi_percent_avg": nan_to_zero(thdi_overall),
         "power_factor_avg": nan_to_zero(pf_series.mean()),

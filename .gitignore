@@ -2,7 +2,10 @@
 /node_modules
 /frontend/node_modules
 /backend/venv
-/backend/__pycache__
+
+# Python caches (match nested __pycache__ in core/, routers/, services/, ...)
+__pycache__/
+*.pyc
 
 # Build artifacts
 /frontend/dist

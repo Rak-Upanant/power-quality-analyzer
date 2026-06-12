@@ -43,6 +43,24 @@ def get_last_value_safe(series: pd.Series) -> float:
     return float(s.iloc[-1]) if not s.empty else 0.0
 
 
+def get_energy_delta_safe(series: pd.Series) -> float:
+    """
+    Period energy consumption = last − first cumulative reading.
+
+    Meter energy columns (Wh / varh / VAh) are running counters. Using only the
+    last value over-reports when an export continues a counter that did not start
+    at zero. The delta is the true consumption over the captured window.
+
+    Guards against a negative result (counter reset or rollover mid-capture) by
+    falling back to the last value.
+    """
+    s = series.dropna()
+    if s.empty:
+        return 0.0
+    delta = float(s.iloc[-1]) - float(s.iloc[0])
+    return delta if delta >= 0 else float(s.iloc[-1])
+
+
 # ---------------------------------------------------------------------------
 # Main percentile calculator
 # ---------------------------------------------------------------------------
@@ -67,7 +85,12 @@ def calculate_percentiles(
     for col in cols:
         if col not in df.columns:
             continue
-        series = to_numeric_safe(df[col])
+        # Keep NaN here (do NOT zero-fill): missing/blank readings must be
+        # DROPPED before computing percentiles, not turned into 0. Zeros would
+        # drag the 95th/99th percentile down and could turn a true Fail into a
+        # false Pass. `to_numeric_safe` is still used elsewhere (e.g. trend
+        # arrays for charts) where 0-fill is the desired behaviour.
+        series = pd.to_numeric(df[col], errors="coerce").dropna()
         if series.empty:
             continue
 
@@ -103,7 +126,9 @@ def calculate_individual_harmonic_percentiles(
         for p in (1, 2, 3):
             col = f"{prefix}{p}h{h}"
             if col in df.columns:
-                series = to_numeric_safe(df[col])
+                # Drop NaN (not zero-fill) so blank / '- - -' harmonic cells do
+                # not bias the percentile downward. See note in calculate_percentiles.
+                series = pd.to_numeric(df[col], errors="coerce").dropna()
                 if not series.empty:
                     results[f"{col}_{int(percentile)}th"] = get_percentile_safe(series, percentile)
     return results
