@@ -6,7 +6,8 @@ import TrendTabs from './TrendTabs';
 import { getVoltageLimit, getCurrentLimitData } from './utils';
 // Import extracted constants and components
 import { EXPORT_SECTIONS, POWER_ONLY_EXPORT_SECTIONS, fmtEnergy, fmtPower, fmtVal } from './constants/reportConstants';
-import { buildAnalysisPdf } from './utils/pdfReport';
+// buildAnalysisPdf is imported lazily inside handleExportPDF so jsPDF and the
+// (heavy) report code are NOT part of the initial page bundle.
 import ComplianceModal from './components/ComplianceModal';
 import SummaryInfoModal from './components/SummaryInfoModal';
 import ExportModal from './components/ExportModal';
@@ -115,13 +116,20 @@ const AnalysisReport = React.forwardRef(({
         setShowExportModal(false); setIsPrinting(true);
         // Defer so the printing overlay paints and the off-screen charts mount
         // before buildAnalysisPdf snapshots them.
-        setTimeout(() => {
-            buildAnalysisPdf({
-                analysisResult, systemInfo, tariff, selectedSections, isPowerOnly, chartGroups,
-                refs: { vhChartRef, ahChartRef, demandProfileRef, trendChartRefs },
-            })
-                .catch(err => console.error('PDF generation error:', err))
-                .finally(() => setIsPrinting(false));
+        setTimeout(async () => {
+            try {
+                // Code-split: the PDF module (jsPDF + autotable + Thai font) is
+                // only downloaded the first time the user exports.
+                const { buildAnalysisPdf } = await import('./utils/pdfReport');
+                await buildAnalysisPdf({
+                    analysisResult, systemInfo, tariff, selectedSections, isPowerOnly, chartGroups,
+                    refs: { vhChartRef, ahChartRef, demandProfileRef, trendChartRefs },
+                });
+            } catch (err) {
+                console.error('PDF generation error:', err);
+            } finally {
+                setIsPrinting(false);
+            }
         }, 500);
     };
 

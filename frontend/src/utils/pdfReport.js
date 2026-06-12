@@ -10,7 +10,14 @@
 // power-consumption report based on `isPowerOnly`.
 
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { PARAM_GROUPS, fmtVal } from '../constants/reportConstants';
+
+// Brand palette (kept in sync with the app's --primary-color).
+const BRAND = [37, 99, 235];      // blue
+const PASS = [22, 163, 74];       // green
+const FAIL = [220, 38, 38];       // red
+const NA = [100, 116, 139];       // slate grey
 
 // ─── Low-level table row ───────────────────────────────────────────────────
 // Draws one bordered row of cells. Optionally fills a highlight background.
@@ -51,6 +58,122 @@ function addFootersAndPageNumbers(doc, fileName) {
         doc.text(`Page ${i} / ${total}`, dW - margin, yText, { align: 'right' });
     }
     doc.setTextColor(0, 0, 0);
+}
+
+// ─── Cover / badge / dashboard helpers (NEW) ───────────────────────────────
+
+// A coloured rounded pill, e.g. "PASS" / "FAIL" / "N/A". Returns its width so
+// callers can place several in a row.
+function statusBadge(doc, x, y, text, color) {
+    doc.setFontSize(9); doc.setFont(undefined, 'bold');
+    const w = doc.getTextWidth(text) + 8;
+    const h = 7;
+    doc.setFillColor(...color);
+    doc.roundedRect(x, y, w, h, 1.5, 1.5, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.text(text, x + w / 2, y + 4.8, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    return w;
+}
+
+// A small "stat card": label on top, large value below, thin border + accent.
+function statCard(doc, x, y, w, h, label, value, accent = BRAND) {
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(x, y, w, h, 1.5, 1.5, 'FD');
+    doc.setFillColor(...accent); doc.rect(x, y, 1.4, h, 'F');   // accent stripe
+    doc.setFontSize(7.5); doc.setFont(undefined, 'normal'); doc.setTextColor(100, 116, 139);
+    doc.text(label, x + 4, y + 5);
+    doc.setFontSize(12); doc.setFont(undefined, 'bold'); doc.setTextColor(15, 23, 42);
+    doc.text(String(value), x + 4, y + h - 4);
+    doc.setTextColor(0, 0, 0);
+}
+
+// Full-report cover: brand band, title, compliance badges, headline stat cards.
+function drawHeroCover(doc, mg, dW, analysisResult) {
+    // Brand band
+    doc.setFillColor(...BRAND);
+    doc.rect(0, 0, dW, 28, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(19); doc.setFont(undefined, 'bold');
+    doc.text('Power Quality Analysis Report', mg, 13);
+    doc.setFontSize(10); doc.setFont(undefined, 'normal');
+    doc.text('IEEE 519-2022 compliance assessment', mg, 20);
+    doc.setFontSize(9);
+    doc.text(analysisResult.fileName || '', dW - mg, 20, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+
+    // Compliance badges
+    let y = 38;
+    const vc = analysisResult.voltage_compliance;
+    const cc = analysisResult.current_compliance;
+    doc.setFontSize(9); doc.setFont(undefined, 'normal');
+    doc.text('Voltage', mg, y + 5);
+    let x = mg + 18;
+    x += statusBadge(doc, x, y, vc === 'Pass' ? 'PASS' : 'FAIL', vc === 'Pass' ? PASS : FAIL) + 10;
+    doc.text('Current', x, y + 5);
+    x += 18;
+    const ccText = cc === 'Pass' ? 'PASS' : cc === 'N/A' ? 'N/A' : 'FAIL';
+    const ccColor = cc === 'Pass' ? PASS : cc === 'N/A' ? NA : FAIL;
+    statusBadge(doc, x, y, ccText, ccColor);
+    y += 13;
+
+    // Headline stat cards
+    const s = analysisResult.summary_stats;
+    const tW = dW - mg * 2;
+    const gap = 4;
+    const cw = (tW - gap * 3) / 4;
+    const cards = [
+        ['THDv 95th (LN)', `${analysisResult.thdv_percent.toFixed(2)} %`, vc === 'Pass' ? PASS : FAIL],
+        ['TDD 95th', `${analysisResult.tdd_percent.toFixed(2)} %`, cc === 'Fail' ? FAIL : PASS],
+        ['Avg. Power Factor', s.power_factor_avg.toFixed(3), s.power_factor_avg >= 0.95 ? PASS : [217, 119, 6]],
+        ['Total Active Energy', fmtVal(s.active_energy_total, 'Wh'), BRAND],
+    ];
+    cards.forEach((c, i) => statCard(doc, mg + i * (cw + gap), y, cw, 16, c[0], c[1], c[2]));
+    return y + 24;
+}
+
+// Plain-language verdict paragraph generated from the result.
+function executiveSummary(doc, mg, dW, y, analysisResult) {
+    const tW = dW - mg * 2;
+    const vc = analysisResult.voltage_compliance;
+    const cc = analysisResult.current_compliance;
+    const s = analysisResult.summary_stats;
+    const parts = [];
+
+    const vPass = vc === 'Pass';
+    const cPass = cc === 'Pass' || cc === 'N/A';
+    if (vPass && cPass) {
+        parts.push(`This installation COMPLIES with IEEE 519-2022 ${cc === 'N/A' ? 'voltage limits (current limits not assessed above 69 kV)' : 'voltage and current distortion limits'}.`);
+    } else {
+        const failed = [];
+        if (!vPass) failed.push('voltage harmonic distortion');
+        if (cc === 'Fail') failed.push('current distortion (TDD / individual harmonics)');
+        parts.push(`This installation does NOT comply with IEEE 519-2022: ${failed.join(' and ')} exceed the applicable limits.`);
+    }
+
+    parts.push(`Worst-case THDv (line-to-neutral, weekly 95th/10-min) is ${analysisResult.thdv_percent.toFixed(2)} %` +
+        (cc === 'N/A' ? '.' : `, and TDD is ${analysisResult.tdd_percent.toFixed(2)} %.`));
+
+    const pf = s.power_factor_avg;
+    if (pf && pf < 0.95) {
+        parts.push(`Average power factor is ${pf.toFixed(3)}, below the recommended 0.95 — power-factor correction (capacitor banks or active PFC) would reduce reactive demand.`);
+    } else if (pf) {
+        parts.push(`Average power factor is ${pf.toFixed(3)} (at or above the recommended 0.95).`);
+    }
+
+    if (analysisResult.weekly_window_satisfied === false) {
+        parts.push(`Note: the capture spans ${analysisResult.measurement_duration_days} days; IEEE 519-2022 §4.4 weekly statistics assume a 7-day window, so treat these verdicts as indicative.`);
+    }
+
+    const text = parts.join(' ');
+    doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.text('Executive Summary', mg, y); y += 6;
+    doc.setFontSize(9.5); doc.setFont(undefined, 'normal');
+    const lines = doc.splitTextToSize(text, tW - 6);
+    const boxH = lines.length * 5 + 8;
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(mg, y - 4, tW, boxH, 1.5, 1.5, 'FD');
+    doc.text(lines, mg + 3, y + 2);
+    return y + boxH + 4;
 }
 
 // ─── Full-report sections ──────────────────────────────────────────────────
@@ -333,31 +456,45 @@ export async function buildAnalysisPdf({
     }
 
     // ── Full IEEE 519 PDF ────────────────────────────────────────────────
-    doc.setFontSize(18); doc.setFont(undefined, 'bold');
-    doc.text('Power Quality Analysis', dW / 2, y, { align: 'center' }); y += 7;
-    doc.setFontSize(11); doc.setFont(undefined, 'normal');
-    doc.text(analysisResult.fileName || '', dW / 2, y, { align: 'center' }); y += 12;
+    // Cover: brand band, compliance badges, headline stat cards.
+    y = drawHeroCover(doc, mg, dW, analysisResult);
+    // Plain-language verdict.
+    y = executiveSummary(doc, mg, dW, y, analysisResult);
 
     if (has('system_params')) { secTitle('System Parameters'); y = drawSystemParamsSection(doc, mg, dW, y, systemInfo); }
 
     if (has('summary')) {
         secTitle('Compliance Summary');
         const { summary_stats: s, voltage_compliance: vc, current_compliance: cc, thdv_percent, tdd_percent } = analysisResult;
-        [
-            ['Voltage Compliance:', vc, vc === 'Pass' ? [0, 128, 0] : [180, 0, 0]],
-            ['Current Compliance:', cc, cc === 'Pass' ? [0, 128, 0] : cc === 'N/A' ? [100, 116, 139] : [180, 0, 0]],
-            ['THDv 95th/10min (LN):', `${thdv_percent.toFixed(2)} %`, null],
-            ['TDD 95th/10min:', `${tdd_percent.toFixed(2)} %`, null],
-            ['Avg. Power Factor:', s.power_factor_avg.toFixed(3), null],
-            ['Avg. Active Power:', fmtVal(s.active_power_avg, 'W'), null],
-            ['Total Active Energy:', fmtVal(s.active_energy_total, 'Wh'), null],
-        ].forEach(([l, v, c]) => {
-            brk(7); doc.setFontSize(10);
-            doc.setFont(undefined, 'bold'); doc.setTextColor(0, 0, 0); doc.text(l, mg, y);
-            doc.setFont(undefined, 'normal'); if (c) doc.setTextColor(...c);
-            doc.text(v, mg + 90, y); doc.setTextColor(0, 0, 0); y += 7;
+        // autotable handles striping, borders and page breaks. The status rows
+        // get a coloured value cell via didParseCell.
+        autoTable(doc, {
+            startY: y,
+            margin: { left: mg, right: mg },
+            theme: 'grid',
+            styles: { fontSize: 9, cellPadding: 1.6 },
+            headStyles: { fillColor: BRAND, textColor: 255 },
+            head: [['Metric', 'Value']],
+            body: [
+                ['Voltage Compliance', vc],
+                ['Current Compliance', cc],
+                ['THDv 95th/10min (LN)', `${thdv_percent.toFixed(2)} %`],
+                ['TDD 95th/10min', `${tdd_percent.toFixed(2)} %`],
+                ['Avg. Power Factor', s.power_factor_avg.toFixed(3)],
+                ['Avg. Active Power', fmtVal(s.active_power_avg, 'W')],
+                ['Total Active Energy', fmtVal(s.active_energy_total, 'Wh')],
+            ],
+            didParseCell: (hook) => {
+                if (hook.section !== 'body' || hook.column.index !== 1) return;
+                const label = hook.row.raw[0];
+                const val = hook.cell.raw;
+                if (label === 'Voltage Compliance' || label === 'Current Compliance') {
+                    hook.cell.styles.fontStyle = 'bold';
+                    hook.cell.styles.textColor = val === 'Pass' ? PASS : val === 'N/A' ? NA : FAIL;
+                }
+            },
         });
-        y += 4;
+        y = doc.lastAutoTable.finalY + 6;
     }
 
     // criteria before ieee_table
