@@ -19,6 +19,27 @@ const PASS = [22, 163, 74];       // green
 const FAIL = [220, 38, 38];       // red
 const NA = [100, 116, 139];       // slate grey
 
+// jsPDF's built-in Helvetica only covers Latin-1, so non-Latin currency symbols
+// (e.g. ฿) render as garbage. Until a Unicode font is embedded, show a readable
+// ISO code in the PDF instead.
+const _CURRENCY_ASCII = { '฿': 'THB', '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₫': 'VND', '₹': 'INR' };
+function pdfCurrency(c) {
+    if (!c) return '';
+    if (_CURRENCY_ASCII[c]) return _CURRENCY_ASCII[c];
+    // eslint-disable-next-line no-control-regex
+    return /^[\x00-\xFF]+$/.test(c) ? c : 'THB';
+}
+
+// Compact peak-demand window: drop seconds, and the date when start and end fall
+// on the same day. Avoids the long line that overflowed the row, and the "→"
+// arrow glyph that the built-in font cannot render.
+function fmtDemandWindow(a, b) {
+    const [ad, at = ''] = String(a).split(' ');
+    const [bd, bt = ''] = String(b).split(' ');
+    const ahm = at.slice(0, 5), bhm = bt.slice(0, 5);
+    return ad === bd ? `${ad} ${ahm}-${bhm}` : `${ad} ${ahm} -> ${bd} ${bhm}`;
+}
+
 // ─── Low-level table row ───────────────────────────────────────────────────
 // Draws one bordered row of cells. Optionally fills a highlight background.
 function pdfRow(doc, margin, tW, cH, cols, widths, rowY, bold, hl, hlColor = [255, 243, 205]) {
@@ -177,6 +198,22 @@ function executiveSummary(doc, mg, dW, y, analysisResult) {
 }
 
 // ─── Full-report sections ──────────────────────────────────────────────────
+
+// Measurement Period block (Started / Ended / Time Interval). Shown on the full
+// report just before System Parameters; mirrors the power-report cover block.
+function drawMeasurementPeriod(doc, mg, dW, y, analysisResult) {
+    const period = periodInfo(analysisResult);
+    if (!period) return y;
+    doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.text('Measurement Period', mg, y); y += 7;
+    doc.setFontSize(9); doc.setFont(undefined, 'normal');
+    const tW = dW - mg * 2; const W = [40, tW - 40];
+    [
+        ['Started', period.start],
+        ['Ended', period.end],
+        ['Time Interval', period.interval],
+    ].forEach(([l, v]) => { pdfRow(doc, mg, tW, 7, [l, v], W, y, false, false); y += 7; });
+    return y + 6;
+}
 
 function drawSystemParamsSection(doc, margin, dW, y, systemInfo) {
     const { nominal_voltage, isc, il } = systemInfo;
@@ -342,7 +379,7 @@ function drawPowerSummarySection(doc, mg, dW, y, analysisResult, tariff) {
         ['Total Active Energy', fmtVal(s.active_energy_total, 'Wh')],
         ['Total Reactive Energy', fmtVal(s.reactive_energy_total, 'varh')],
         ['Total Apparent Energy', fmtVal(s.apparent_energy_total, 'VAh')],
-        ['Estimated Cost', `${tariff.currency} ${cost.toLocaleString(undefined, { maximumFractionDigits: 2 })}  (${kWh.toFixed(0)} kWh @ ${tariff.currency}${tariff.ratePerKwh}/kWh)`],
+        ['Estimated Cost', `${pdfCurrency(tariff.currency)} ${cost.toLocaleString(undefined, { maximumFractionDigits: 2 })}  (${kWh.toFixed(0)} kWh @ ${pdfCurrency(tariff.currency)}${tariff.ratePerKwh}/kWh)`],
         ['Avg. Active Power', fmtVal(s.active_power_avg, 'W')],
         ['Avg. Reactive Power', fmtVal(s.reactive_power_avg, 'var')],
         ['Avg. Apparent Power', fmtVal(s.apparent_power_avg, 'VA')],
@@ -356,7 +393,7 @@ function drawPowerSummarySection(doc, mg, dW, y, analysisResult, tariff) {
     if (pd) {
         rows.splice(4, 0, [
             `Peak ${pd.window_minutes}-min Demand`,
-            `${(pd.avg_w / 1000).toFixed(1)} kW (${pd.start} → ${pd.end})`,
+            `${(pd.avg_w / 1000).toFixed(1)} kW (${fmtDemandWindow(pd.start, pd.end)})`,
         ]);
     }
     rows.forEach(([l, v]) => { pdfRow(doc, mg, tW, cH, [l, v], W, y, false, false); y += cH; });
@@ -425,7 +462,19 @@ export async function buildAnalysisPdf({
     let y = mg; const has = id => selectedSections.includes(id);
     const brk = h => { if (y + h > dH - mg) { doc.addPage(); y = mg; } };
     const secTitle = t => { brk(15); doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.text(t, mg, y); y += 8; doc.setFont(undefined, 'normal'); };
-    const drawChart = (refOrChart, w, h) => { if (refOrChart?.current) { const img = refOrChart.current.toBase64Image('image/png', 1); brk(h + 10); doc.addImage(img, 'PNG', (dW - w) / 2, y, w, h); y += h + 10; } };
+    // `hMax` is a maximum: the image is scaled to the chart's native aspect
+    // ratio so a wide canvas is never squashed into a fixed box (this fixes the
+    // demand-profile stretching).
+    const drawChart = (refOrChart, w, hMax) => {
+        const chart = refOrChart?.current;
+        if (!chart) return;
+        const img = chart.toBase64Image('image/png', 1);
+        let h = hMax;
+        if (chart.width && chart.height) h = Math.min(hMax, w * (chart.height / chart.width));
+        brk(h + 10);
+        doc.addImage(img, 'PNG', (dW - w) / 2, y, w, h);
+        y += h + 10;
+    };
 
     if (isPowerOnly) {
         // ── Power-consumption PDF ────────────────────────────────────────
@@ -459,6 +508,8 @@ export async function buildAnalysisPdf({
             grp.forEach(g => { const r = trendChartRefs.get(g.title); if (r?.current) drawChart(r, 185, 70); });
         });
 
+        if (has('param_guide')) { doc.addPage(); y = mg; y = drawParamGuide(doc, mg, dW, y); }
+
         addFootersAndPageNumbers(doc, analysisResult.fileName);
         doc.save(`power-consumption-${analysisResult.fileName?.replace('.xlsx', '') || 'report'}.pdf`);
         return;
@@ -469,6 +520,10 @@ export async function buildAnalysisPdf({
     y = drawHeroCover(doc, mg, dW, analysisResult);
     // Plain-language verdict.
     y = executiveSummary(doc, mg, dW, y, analysisResult);
+
+    // Measurement Period (Started / Ended / Interval) before System Parameters.
+    brk(40);
+    y = drawMeasurementPeriod(doc, mg, dW, y, analysisResult);
 
     if (has('system_params')) { secTitle('System Parameters'); y = drawSystemParamsSection(doc, mg, dW, y, systemInfo); }
 

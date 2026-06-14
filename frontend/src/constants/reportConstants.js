@@ -27,6 +27,7 @@ export const POWER_ONLY_EXPORT_SECTIONS = [
     { id:'energy',         label:'Energy Trends' },
     { id:'harmonic',       label:'Harmonic Trends' },
     { id:'power_factor',   label:'Power Factor Trends' },
+    { id:'param_guide',    label:'Parameter Reference Guide' },
 ];
 
 export const PARAM_GROUPS = [
