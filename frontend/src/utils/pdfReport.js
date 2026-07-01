@@ -12,23 +12,17 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PARAM_GROUPS, fmtVal } from '../constants/reportConstants';
+import { registerSarabun } from './sarabunFont';
+
+// Font family used throughout the PDF. Sarabun is embedded (Thai + Latin + ฿),
+// so Thai site names and the baht symbol render correctly.
+const FONT = 'Sarabun';
 
 // Brand palette (kept in sync with the app's --primary-color).
 const BRAND = [37, 99, 235];      // blue
 const PASS = [22, 163, 74];       // green
 const FAIL = [220, 38, 38];       // red
 const NA = [100, 116, 139];       // slate grey
-
-// jsPDF's built-in Helvetica only covers Latin-1, so non-Latin currency symbols
-// (e.g. ฿) render as garbage. Until a Unicode font is embedded, show a readable
-// ISO code in the PDF instead.
-const _CURRENCY_ASCII = { '฿': 'THB', '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₫': 'VND', '₹': 'INR' };
-function pdfCurrency(c) {
-    if (!c) return '';
-    if (_CURRENCY_ASCII[c]) return _CURRENCY_ASCII[c];
-    // eslint-disable-next-line no-control-regex
-    return /^[\x00-\xFF]+$/.test(c) ? c : 'THB';
-}
 
 // Compact peak-demand window: drop seconds, and the date when start and end fall
 // on the same day. Avoids the long line that overflowed the row, and the "→"
@@ -379,7 +373,7 @@ function drawPowerSummarySection(doc, mg, dW, y, analysisResult, tariff) {
         ['Total Active Energy', fmtVal(s.active_energy_total, 'Wh')],
         ['Total Reactive Energy', fmtVal(s.reactive_energy_total, 'varh')],
         ['Total Apparent Energy', fmtVal(s.apparent_energy_total, 'VAh')],
-        ['Estimated Cost', `${pdfCurrency(tariff.currency)} ${cost.toLocaleString(undefined, { maximumFractionDigits: 2 })}  (${kWh.toFixed(0)} kWh @ ${pdfCurrency(tariff.currency)}${tariff.ratePerKwh}/kWh)`],
+        ['Estimated Cost', `${tariff.currency} ${cost.toLocaleString(undefined, { maximumFractionDigits: 2 })}  (${kWh.toFixed(0)} kWh @ ${tariff.currency}${tariff.ratePerKwh}/kWh)`],
         ['Avg. Active Power', fmtVal(s.active_power_avg, 'W')],
         ['Avg. Reactive Power', fmtVal(s.reactive_power_avg, 'var')],
         ['Avg. Apparent Power', fmtVal(s.apparent_power_avg, 'VA')],
@@ -458,6 +452,9 @@ export async function buildAnalysisPdf({
     const { vhChartRef, ahChartRef, demandProfileRef, trendChartRefs } = refs;
 
     const doc = new jsPDF('p', 'mm', 'a4'); const mg = 15;
+    // Embed + activate Sarabun so Thai text and ฿ render. All later
+    // setFont(undefined, style) calls keep this family.
+    registerSarabun(doc);
     const dW = doc.internal.pageSize.getWidth(); const dH = doc.internal.pageSize.getHeight();
     let y = mg; const has = id => selectedSections.includes(id);
     const brk = h => { if (y + h > dH - mg) { doc.addPage(); y = mg; } };
@@ -536,7 +533,7 @@ export async function buildAnalysisPdf({
             startY: y,
             margin: { left: mg, right: mg },
             theme: 'grid',
-            styles: { fontSize: 9, cellPadding: 1.6 },
+            styles: { font: FONT, fontSize: 9, cellPadding: 1.6 },
             headStyles: { fillColor: BRAND, textColor: 255 },
             head: [['Metric', 'Value']],
             body: [
