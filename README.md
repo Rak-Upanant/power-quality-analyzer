@@ -425,9 +425,16 @@ Ideas that are NOT yet implemented. Listed roughly in priority order — useful 
 
 ⬜ **Remaining:** _(none in Priority 0 — see Priority 1 below)_
 
-### Priority 1 — PDF report overhaul (designed, not yet built)
+### Priority 1 — PDF report overhaul ✅ (done, June 2026)
 
-Extract PDF generation from `AnalysisReport.jsx` (~350 lines) into `frontend/src/utils/pdfReport.js` with small named helpers, adopting **jspdf-autotable** for tables. Then add: cover page with headline stat cards, page numbers + footer on every page, PASS/FAIL pill badges, plain-language executive summary, traffic-light metric dashboard, 2× resolution chart export. Stretch: table of contents (needs two-pass page numbering). **Thai font embedding** (e.g. Sarabun) is the natural companion — jsPDF built-in fonts cannot render Thai text.
+PDF generation was extracted from `AnalysisReport.jsx` into `frontend/src/utils/pdfReport.js` (`buildAnalysisPdf`, imported lazily so jsPDF/autotable/font are code-split out of the initial bundle). Delivered:
+- Cover page with brand band, PASS/FAIL/N-A pill badges, headline stat cards, and a plain-language executive summary.
+- Page-number footer (`Page X / N` + file name) on every page.
+- All tables via **jspdf-autotable** (Compliance Summary, IEEE 519 Table 1/2 with active-limit highlight, Compliance Criteria with red fail rows).
+- Measurement Period block on the full report; compact peak-demand line; demand-profile aspect-ratio fix.
+- **Sarabun Thai font embedded** (`sarabunFont.js`) — Thai site names + the ฿ symbol render correctly.
+
+Not done (deliberately): **2× chart export** — the multi-chart reports run ~180 pages; doubling every chart image would push files from ~18 MB to 50 MB+. Revisit selectively for cover/spectrum charts only. Stretch: table of contents (needs two-pass page numbering).
 
 ### Power-consumption mode enhancements
 
