@@ -223,67 +223,112 @@ function drawSystemParamsSection(doc, margin, dW, y, systemInfo) {
     return y + 4;
 }
 
+// Shared autotable defaults for the report's data tables.
+function _tableBase(startY, mg) {
+    return {
+        startY,
+        margin: { left: mg, right: mg },
+        theme: 'grid',
+        styles: { font: FONT, fontSize: 8.5, cellPadding: 1.4 },
+        headStyles: { fillColor: BRAND, textColor: 255, fontStyle: 'bold' },
+    };
+}
+const HL = [255, 243, 205];   // active-limit highlight (amber)
+const FAILBG = [255, 210, 210]; // failing-row background (red tint)
+
 function drawIEEETablesSection(doc, margin, dW, y, systemInfo) {
-    const { nominal_voltage, isc, il } = systemInfo; const kv = nominal_voltage / 1000; const ratio = il > 0 ? isc / il : 0;
-    const tW = dW - margin * 2; const cH = 7;
-    const row = (cols, widths, rY, bold, hl) => pdfRow(doc, margin, tW, cH, cols, widths, rY, bold, hl);
-    doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.text('IEEE 519-2022 Table 1 - Voltage Distortion Limits', margin, y); y += 6;
-    doc.setFontSize(9);
-    const vW = [65, 55, 60];
-    [['Bus Voltage at PCC', 'Individual (%)', 'THD (%)'], ['<= 1 kV', '5.0', '8.0'], ['> 1 kV - 69 kV', '3.0', '5.0'], ['> 69-161 kV', '1.5', '2.5'], ['> 161 kV', '1.0', '1.5']].forEach((r, i) => {
-        const a = i > 0 && ((i === 1 && kv <= 1) || (i === 2 && kv > 1 && kv <= 69) || (i === 3 && kv > 69 && kv <= 161) || (i === 4 && kv > 161));
-        row(r, vW, y, i === 0, a); y += cH;
+    const { nominal_voltage, isc, il } = systemInfo;
+    const kv = nominal_voltage / 1000; const ratio = il > 0 ? isc / il : 0;
+    const activeV = kv <= 1 ? 0 : kv <= 69 ? 1 : kv <= 161 ? 2 : 3;
+    const activeC = ratio < 20 ? 0 : ratio < 50 ? 1 : ratio < 100 ? 2 : ratio < 1000 ? 3 : 4;
+
+    doc.setFontSize(11); doc.setFont(undefined, 'bold');
+    doc.text('IEEE 519-2022 Table 1 - Voltage Distortion Limits', margin, y); y += 2;
+    autoTable(doc, {
+        ..._tableBase(y + 2, margin),
+        head: [['Bus Voltage at PCC', 'Individual (%)', 'THD (%)']],
+        body: [['<= 1 kV', '5.0', '8.0'], ['> 1 kV - 69 kV', '3.0', '5.0'], ['> 69-161 kV', '1.5', '2.5'], ['> 161 kV', '1.0', '1.5']],
+        didParseCell: (h) => { if (h.section === 'body' && h.row.index === activeV) { h.cell.styles.fillColor = HL; h.cell.styles.fontStyle = 'bold'; } },
     });
-    y += 6;
-    doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.text('IEEE 519-2022 Table 2 - Current Distortion Limits (120V-69kV)', margin, y); y += 6;
-    doc.setFontSize(9);
-    const cW = [28, 26, 26, 26, 26, 26, 22];
-    [['Isc/IL', '<11h', '11-17h', '17-23h', '23-35h', '>35h', 'TDD'], ['<20', '4.0', '2.0', '1.5', '0.6', '0.3', '5.0'], ['20-50', '7.0', '3.5', '2.5', '1.0', '0.5', '8.0'], ['50-100', '10.0', '4.5', '4.0', '1.5', '0.7', '12.0'], ['100-1000', '12.0', '5.5', '5.0', '2.0', '1.0', '15.0'], ['>1000', '15.0', '7.0', '6.0', '2.5', '1.4', '20.0']].forEach((r, i) => {
-        const a = i > 0 && ((i === 1 && ratio < 20) || (i === 2 && ratio >= 20 && ratio < 50) || (i === 3 && ratio >= 50 && ratio < 100) || (i === 4 && ratio >= 100 && ratio < 1000) || (i === 5 && ratio >= 1000));
-        row(r, cW, y, i === 0, a); y += cH;
+    y = doc.lastAutoTable.finalY + 8;
+
+    doc.setFontSize(11); doc.setFont(undefined, 'bold');
+    doc.text('IEEE 519-2022 Table 2 - Current Distortion Limits (120V-69kV)', margin, y); y += 2;
+    autoTable(doc, {
+        ..._tableBase(y + 2, margin),
+        head: [['Isc/IL', '<11h', '11-17h', '17-23h', '23-35h', '>35h', 'TDD']],
+        body: [['<20', '4.0', '2.0', '1.5', '0.6', '0.3', '5.0'], ['20-50', '7.0', '3.5', '2.5', '1.0', '0.5', '8.0'], ['50-100', '10.0', '4.5', '4.0', '1.5', '0.7', '12.0'], ['100-1000', '12.0', '5.5', '5.0', '2.0', '1.0', '15.0'], ['>1000', '15.0', '7.0', '6.0', '2.5', '1.4', '20.0']],
+        didParseCell: (h) => { if (h.section === 'body' && h.row.index === activeC) { h.cell.styles.fillColor = HL; h.cell.styles.fontStyle = 'bold'; } },
     });
+    y = doc.lastAutoTable.finalY + 4;
     doc.setFontSize(8); doc.setFont(undefined, 'italic');
-    doc.text(`Isc/IL=${ratio.toFixed(1)} | ${kv.toFixed(3)} kV | Highlighted = active limit`, margin, y + 3);
-    return y + 10;
+    doc.text(`Isc/IL=${ratio.toFixed(1)} | ${kv.toFixed(3)} kV | Highlighted = active limit`, margin, y);
+    doc.setFont(undefined, 'normal');
+    return y + 8;
 }
 
 function drawComplianceCriteria(doc, margin, dW, y, analysisResult) {
     const d = analysisResult.compliance_detail; if (!d) return y;
-    const tW = dW - margin * 2; const cH = 7;
-    const row = (cols, widths, rY, bold, hl, hlC) => pdfRow(doc, margin, tW, cH, cols, widths, rY, bold, hl, hlC || [255, 243, 205]);
 
-    // Voltage
+    // Colour the whole row red when the Result cell reads FAIL.
+    const failColour = (h) => {
+        if (h.section !== 'body') return;
+        const result = h.row.raw[h.row.raw.length - 1];
+        if (typeof result === 'string' && result.startsWith('FAIL')) h.cell.styles.fillColor = FAILBG;
+    };
+
+    // ── Voltage §5.1 ───────────────────────────────────────────────────────
     doc.setFontSize(11); doc.setFont(undefined, 'bold');
-    doc.text('Voltage Distortion (IEEE Section 5.1) - Line-to-Neutral', margin, y); y += 7;
-    doc.setFontSize(8.5);
-    const vW = [28, 58, 26, 26, 26]; row(['Phase', 'Criterion', 'Measured', 'Limit', 'Result'], vW, y, true, false); y += cH;
+    doc.text('Voltage Distortion (IEEE Section 5.1) - Line-to-Neutral', margin, y); y += 2;
+    const vBody = [];
     d.voltage.per_phase.forEach(p => {
-        const f95 = !p.pass_t95; row([p.phase, 'Weekly 95th/10min', `${p.t95_10min}%`, `${p.limit_thd}%`, f95 ? 'FAIL' : 'Pass'], vW, y, false, f95, f95 ? [255, 210, 210] : null); y += cH;
-        const f99 = !p.pass_t99; row(['', 'Weekly 99th/10min', `${p.t99_10min}%`, `${p.limit_thd_99}%`, f99 ? 'FAIL' : 'Pass'], vW, y, false, f99, f99 ? [255, 210, 210] : null); y += cH;
+        vBody.push([p.phase, 'Weekly 95th/10min', `${p.t95_10min}%`, `${p.limit_thd}%`, p.pass_t95 ? 'Pass' : 'FAIL']);
+        vBody.push(['', 'Weekly 99th/10min', `${p.t99_10min}%`, `${p.limit_thd_99}%`, p.pass_t99 ? 'Pass' : 'FAIL']);
     });
+    autoTable(doc, {
+        ..._tableBase(y + 2, margin),
+        head: [['Phase', 'Criterion', 'Measured', 'Limit', 'Result']],
+        body: vBody,
+        didParseCell: failColour,
+    });
+    y = doc.lastAutoTable.finalY + 4;
+
     if (d.voltage.top_harmonics.length > 0) {
-        y += 2; const hW = [18, 20, 20, 20, 22, 22, 42]; row(['Order', 'V1', 'V2', 'V3', 'Worst', 'Limit', 'Result'], hW, y, true, false); y += cH;
-        d.voltage.top_harmonics.forEach(h => { const f = !h.pass; row([`H${h.order}`, `${h.V1}%`, `${h.V2}%`, `${h.V3}%`, `${h.worst}%`, `${h.limit}%`, f ? `FAIL (${(h.worst / h.limit).toFixed(1)}x)` : 'Pass'], hW, y, false, f, f ? [255, 210, 210] : null); y += cH; });
+        autoTable(doc, {
+            ..._tableBase(y, margin),
+            head: [['Order', 'V1', 'V2', 'V3', 'Worst', 'Limit', 'Result']],
+            body: d.voltage.top_harmonics.map(h => [`H${h.order}`, `${h.V1}%`, `${h.V2}%`, `${h.V3}%`, `${h.worst}%`, `${h.limit}%`, h.pass ? 'Pass' : `FAIL (${(h.worst / h.limit).toFixed(1)}x)`]),
+            didParseCell: failColour,
+        });
+        y = doc.lastAutoTable.finalY + 4;
     }
-    y += 6;
 
-    // Page break before Current
-    doc.addPage();
-    y = margin;
-
-    // Current
+    // ── Current §5.3 (new page) ────────────────────────────────────────────
+    doc.addPage(); y = margin;
     const r = d.isc_il_ratio; const br = r < 20 ? '<20' : r < 50 ? '20-50' : r < 100 ? '50-100' : r < 1000 ? '100-1000' : '>1000';
     doc.setFontSize(11); doc.setFont(undefined, 'bold');
-    doc.text(`Current Distortion (IEEE Section 5.3) - Isc/IL=${r} Bracket ${br}`, margin, y); y += 7;
-    doc.setFontSize(8.5);
-    const cW = [28, 58, 26, 26, 26]; row(['Phase', 'Criterion', 'Measured', 'Limit', 'Result'], cW, y, true, false); y += cH;
+    doc.text(`Current Distortion (IEEE Section 5.3) - Isc/IL=${r} Bracket ${br}`, margin, y); y += 2;
+    const cBody = [];
     d.current.per_phase_tdd.forEach(p => {
-        const f95 = !p.pass_t95; row([p.phase, 'Weekly 95th/10min', `${p.t95_10min}%`, `${p.limit_tdd}%`, f95 ? 'FAIL' : 'Pass'], cW, y, false, f95, f95 ? [255, 210, 210] : null); y += cH;
-        const f99 = !p.pass_t99; row(['', 'Weekly 99th/10min', `${p.t99_10min}%`, `${p.limit_tdd_99}%`, f99 ? 'FAIL' : 'Pass'], cW, y, false, f99, f99 ? [255, 210, 210] : null); y += cH;
+        cBody.push([p.phase, 'Weekly 95th/10min', `${p.t95_10min}%`, `${p.limit_tdd}%`, p.pass_t95 ? 'Pass' : 'FAIL']);
+        cBody.push(['', 'Weekly 99th/10min', `${p.t99_10min}%`, `${p.limit_tdd_99}%`, p.pass_t99 ? 'Pass' : 'FAIL']);
     });
+    autoTable(doc, {
+        ..._tableBase(y + 2, margin),
+        head: [['Phase', 'Criterion', 'Measured', 'Limit', 'Result']],
+        body: cBody,
+        didParseCell: failColour,
+    });
+    y = doc.lastAutoTable.finalY + 4;
+
     if (d.current.top_harmonics.length > 0) {
-        y += 2; const hW = [18, 20, 20, 20, 22, 22, 42]; row(['Order', 'A1', 'A2', 'A3', 'Worst', 'Limit', 'Result'], hW, y, true, false); y += cH;
-        d.current.top_harmonics.forEach(h => { const f = !h.pass; row([`H${h.order}`, `${h.A1}%`, `${h.A2}%`, `${h.A3}%`, `${h.worst}%`, `${h.limit}%`, f ? `FAIL (${(h.worst / h.limit).toFixed(1)}x)` : 'Pass'], hW, y, false, f, f ? [255, 210, 210] : null); y += cH; });
+        autoTable(doc, {
+            ..._tableBase(y, margin),
+            head: [['Order', 'A1', 'A2', 'A3', 'Worst', 'Limit', 'Result']],
+            body: d.current.top_harmonics.map(h => [`H${h.order}`, `${h.A1}%`, `${h.A2}%`, `${h.A3}%`, `${h.worst}%`, `${h.limit}%`, h.pass ? 'Pass' : `FAIL (${(h.worst / h.limit).toFixed(1)}x)`]),
+            didParseCell: failColour,
+        });
+        y = doc.lastAutoTable.finalY + 4;
     }
     return y + 6;
 }
